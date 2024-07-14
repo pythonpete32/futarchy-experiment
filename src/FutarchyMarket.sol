@@ -54,7 +54,11 @@ contract FutarchyMarket {
     /// @param proposalId The ID of the proposal associated with the market
     /// @param virtualReserve The initial virtual reserve set for the market
     /// @param tradingPeriod The duration of the trading period
-    event MarketCreated(bytes32 indexed proposalId, uint256 virtualReserve, uint256 tradingPeriod);
+    event MarketCreated(
+        bytes32 indexed proposalId,
+        uint256 virtualReserve,
+        uint256 tradingPeriod
+    );
 
     /// @notice Event emitted when shares are bought
     /// @param proposalId The ID of the proposal associated with the market
@@ -63,7 +67,11 @@ contract FutarchyMarket {
     /// @param shareAmount The number of shares bought
     /// @param tokenAmount The amount of governance tokens paid
     event SharesBought(
-        bytes32 indexed proposalId, address indexed trader, bool isYes, uint256 shareAmount, uint256 tokenAmount
+        bytes32 indexed proposalId,
+        address indexed trader,
+        bool isYes,
+        uint256 shareAmount,
+        uint256 tokenAmount
     );
 
     /// @notice Event emitted when shares are sold
@@ -73,7 +81,11 @@ contract FutarchyMarket {
     /// @param shareAmount The number of shares sold
     /// @param tokenAmount The amount of governance tokens received
     event SharesSold(
-        bytes32 indexed proposalId, address indexed trader, bool isYes, uint256 shareAmount, uint256 tokenAmount
+        bytes32 indexed proposalId,
+        address indexed trader,
+        bool isYes,
+        uint256 shareAmount,
+        uint256 tokenAmount
     );
 
     /// @notice Event emitted when a market is resolved
@@ -85,7 +97,11 @@ contract FutarchyMarket {
     /// @param _governanceToken The address of the governance token contract
     /// @param _daoAddress The address of the DAO contract
     /// @param _oracle The address authorized to resolve markets
-    constructor(address _governanceToken, address _daoAddress, address _oracle) {
+    constructor(
+        address _governanceToken,
+        address _daoAddress,
+        address _oracle
+    ) {
         governanceToken = IERC20(_governanceToken);
         daoAddress = _daoAddress;
         oracle = _oracle;
@@ -96,7 +112,11 @@ contract FutarchyMarket {
     /// @param virtualReserve The initial virtual reserve to set for the market
     /// @param tradingPeriod The duration of the trading period
     /// @dev Only the DAO contract can call this function
-    function createMarket(bytes32 proposalId, uint256 virtualReserve, uint256 tradingPeriod) external {
+    function createMarket(
+        bytes32 proposalId,
+        uint256 virtualReserve,
+        uint256 tradingPeriod
+    ) external {
         // TODO: Implement market creation logic
     }
 
@@ -104,7 +124,11 @@ contract FutarchyMarket {
     /// @param proposalId The ID of the proposal associated with the market
     /// @param isYes Whether to buy YES shares (false for NO shares)
     /// @param amount The amount of governance tokens to spend
-    function buyShares(bytes32 proposalId, bool isYes, uint256 amount) external {
+    function buyShares(
+        bytes32 proposalId,
+        bool isYes,
+        uint256 amount
+    ) external {
         // TODO: Implement share buying logic
     }
 
@@ -112,7 +136,11 @@ contract FutarchyMarket {
     /// @param proposalId The ID of the proposal associated with the market
     /// @param isYes Whether to sell YES shares (false for NO shares)
     /// @param shareAmount The number of shares to sell
-    function sellShares(bytes32 proposalId, bool isYes, uint256 shareAmount) external {
+    function sellShares(
+        bytes32 proposalId,
+        bool isYes,
+        uint256 shareAmount
+    ) external {
         // TODO: Implement share selling logic
     }
 
@@ -141,7 +169,10 @@ contract FutarchyMarket {
     /// @param proposalId The ID of the proposal associated with the market
     /// @param user The address of the user
     /// @return The user's position (number of YES and NO shares)
-    function getPosition(bytes32 proposalId, address user) external view returns (Position memory) {
+    function getPosition(
+        bytes32 proposalId,
+        address user
+    ) external view returns (Position memory) {
         // TODO: Implement position retrieval logic
     }
 

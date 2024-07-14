@@ -11,7 +11,10 @@ contract Oracle is IOracle {
         market = IMarket(_market);
     }
 
-    function resolveMarket(bytes32 proposalId, IMarket.Outcome outcome) external override {
+    function resolveMarket(
+        bytes32 proposalId,
+        IMarket.Outcome outcome
+    ) external override {
         market.resolveMarket(proposalId, outcome);
     }
 }
