@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
 interface IMarket {
-    enum Outcome { Unresolved, Yes, No }
+    enum Outcome {
+        Unresolved,
+        Yes,
+        No
+    }
 
     struct Position {
         uint256 yesShares;

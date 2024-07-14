@@ -19,20 +19,24 @@ contract FutarchyMarket {
     /// @notice Structure to hold information about each market
     /// @dev Each market is associated with a specific proposal in the DAO
     struct MarketInfo {
-        bytes32 proposalId;       // Unique identifier of the associated proposal
-        uint256 creationTime;     // Timestamp when the market was created
-        uint256 resolutionTime;   // Timestamp when the market was resolved
-        uint256 tradingPeriod;    // Duration for which trading is allowed
-        bool resolved;            // Whether the market has been resolved
-        Outcome outcome;          // The final outcome of the market
-        uint256 virtualReserve;   // Virtual liquidity to control price sensitivity
-        uint256 actualYesShares;  // Number of YES shares issued
-        uint256 actualNoShares;   // Number of NO shares issued
+        bytes32 proposalId; // Unique identifier of the associated proposal
+        uint256 creationTime; // Timestamp when the market was created
+        uint256 resolutionTime; // Timestamp when the market was resolved
+        uint256 tradingPeriod; // Duration for which trading is allowed
+        bool resolved; // Whether the market has been resolved
+        Outcome outcome; // The final outcome of the market
+        uint256 virtualReserve; // Virtual liquidity to control price sensitivity
+        uint256 actualYesShares; // Number of YES shares issued
+        uint256 actualNoShares; // Number of NO shares issued
         uint256 totalFeesCollected; // Total fees collected from trades
     }
 
     /// @notice Enum to represent the possible outcomes of a market
-    enum Outcome { Unresolved, Yes, No }
+    enum Outcome {
+        Unresolved,
+        Yes,
+        No
+    }
 
     /// @notice Mapping from proposalId to MarketInfo
     mapping(bytes32 => MarketInfo) public markets;
@@ -42,8 +46,8 @@ contract FutarchyMarket {
 
     /// @notice Structure to hold a user's position in a market
     struct Position {
-        uint256 yesShares;  // Number of YES shares held
-        uint256 noShares;   // Number of NO shares held
+        uint256 yesShares; // Number of YES shares held
+        uint256 noShares; // Number of NO shares held
     }
 
     /// @notice Event emitted when a new market is created
@@ -58,7 +62,9 @@ contract FutarchyMarket {
     /// @param isYes Whether YES shares were bought (false for NO shares)
     /// @param shareAmount The number of shares bought
     /// @param tokenAmount The amount of governance tokens paid
-    event SharesBought(bytes32 indexed proposalId, address indexed trader, bool isYes, uint256 shareAmount, uint256 tokenAmount);
+    event SharesBought(
+        bytes32 indexed proposalId, address indexed trader, bool isYes, uint256 shareAmount, uint256 tokenAmount
+    );
 
     /// @notice Event emitted when shares are sold
     /// @param proposalId The ID of the proposal associated with the market
@@ -66,7 +72,9 @@ contract FutarchyMarket {
     /// @param isYes Whether YES shares were sold (false for NO shares)
     /// @param shareAmount The number of shares sold
     /// @param tokenAmount The amount of governance tokens received
-    event SharesSold(bytes32 indexed proposalId, address indexed trader, bool isYes, uint256 shareAmount, uint256 tokenAmount);
+    event SharesSold(
+        bytes32 indexed proposalId, address indexed trader, bool isYes, uint256 shareAmount, uint256 tokenAmount
+    );
 
     /// @notice Event emitted when a market is resolved
     /// @param proposalId The ID of the proposal associated with the market

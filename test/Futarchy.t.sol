@@ -2,10 +2,10 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import {DAO, Market,Oracle} from "./Mocks.sol";
-import {IDAO} from "../src/interfaces/IDAO.sol";
-import {IMarket} from "../src/interfaces/IMarket.sol";
-import {IOracle} from "../src/interfaces/IOracle.sol";
+
+import {IDAO, DAO} from "../src/mocks/MockDAO.sol";
+import {IMarket, Market} from "../src/mocks/MockMarket.sol";
+import {Oracle, IOracle} from "../src/mocks/MockOracle.sol";
 
 contract FutarchyTest is Test {
     IDAO dao;
