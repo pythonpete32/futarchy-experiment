@@ -2,84 +2,9 @@
 pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IMarket} from "../interfaces/IMarket.sol";
 
-interface IMarket {
-    enum Outcome {
-        Unresolved,
-        Yes,
-        No
-    }
-
-    struct MarketInfo {
-        bytes32 proposalId;
-        uint256 creationTime;
-        uint256 resolutionTime;
-        uint256 tradingPeriod;
-        bool resolved;
-        Outcome outcome;
-        uint256 virtualReserve;
-        uint256 actualYesShares;
-        uint256 actualNoShares;
-        uint256 totalFeesCollected;
-    }
-
-    struct Position {
-        uint256 yesShares;
-        uint256 noShares;
-    }
-
-    event MarketCreated(
-        bytes32 indexed proposalId,
-        uint256 virtualReserve,
-        uint256 tradingPeriod
-    );
-    event SharesBought(
-        bytes32 indexed proposalId,
-        address indexed trader,
-        bool isYes,
-        uint256 shareAmount,
-        uint256 tokenAmount
-    );
-    event SharesSold(
-        bytes32 indexed proposalId,
-        address indexed trader,
-        bool isYes,
-        uint256 shareAmount,
-        uint256 tokenAmount
-    );
-    event MarketResolved(bytes32 indexed proposalId, Outcome outcome);
-
-    function createMarket(
-        bytes32 proposalId,
-        uint256 virtualReserve,
-        uint256 tradingPeriod
-    ) external;
-
-    function buyShares(bytes32 proposalId, bool isYes, uint256 amount) external;
-
-    function sellShares(
-        bytes32 proposalId,
-        bool isYes,
-        uint256 shareAmount
-    ) external;
-
-    function resolveMarket(bytes32 proposalId, Outcome outcome) external;
-
-    function claimWinnings(bytes32 proposalId) external;
-
-    function getYesPrice(bytes32 proposalId) external view returns (uint256);
-
-    function getPosition(
-        bytes32 proposalId,
-        address trader
-    ) external view returns (Position memory);
-
-    function getMarketInfo(
-        bytes32 proposalId
-    ) external view returns (MarketInfo memory);
-}
-
-contract Market is IMarket {
+contract FutarchyMarket is IMarket {
     IERC20 public immutable governanceToken;
     address public immutable daoAddress;
     address public oracle;
