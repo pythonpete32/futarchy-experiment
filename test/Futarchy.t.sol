@@ -380,32 +380,123 @@ contract SellSharesTest is FutarchyMarketTestBase {
 }
 
 contract ResolveMarketTest is FutarchyMarketTestBase {
+    bytes32 proposalId;
+    uint256 tradingPeriod;
+
     function setUp() public override {
         super.setUp();
-        // Additional setup for resolve market tests
+        proposalId = keccak256("testProposal");
+        tradingPeriod = 7 days;
+
+        vm.prank(address(dao));
+        market.createMarket(proposalId, tradingPeriod);
     }
 
     function test_RevertWhen_CallerIsNotOracle() external {
-        // It should revert with an unauthorized error.
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        vm.prank(alice);
+        vm.expectRevert("Caller is not the oracle");
+        market.resolveMarket(proposalId, IMarket.Outcome.Yes);
     }
 
     function test_RevertWhen_MarketDoesntExist() external {
-        // It should revert with a market not found error.
+        bytes32 nonExistentProposalId = keccak256("nonExistentProposal");
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        vm.prank(address(oracle));
+        vm.expectRevert("Market does not exist");
+        market.resolveMarket(nonExistentProposalId, IMarket.Outcome.Yes);
     }
 
     function test_RevertWhen_MarketIsAlreadyResolved() external {
-        // It should revert with a market already resolved error.
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        vm.prank(address(oracle));
+        market.resolveMarket(proposalId, IMarket.Outcome.Yes);
+
+        vm.prank(address(oracle));
+        vm.expectRevert("Market is already resolved");
+        market.resolveMarket(proposalId, IMarket.Outcome.No);
     }
 
     function test_RevertWhen_TradingPeriodHasntEnded() external {
-        // It should revert with a trading period not ended error.
+        vm.warp(block.timestamp + tradingPeriod - 1);
+        vm.prank(address(oracle));
+        vm.expectRevert("Trading period has not ended");
+        market.resolveMarket(proposalId, IMarket.Outcome.Yes);
     }
 
     function test_WhenAllConditionsAreMet() external {
-        // It should resolve the market correctly.
-        // It should set the market as resolved.
-        // It should set the outcome.
-        // It should emit a MarketResolved event.
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        vm.prank(address(oracle));
+
+        vm.expectEmit(true, true, true, true);
+        emit IMarket.MarketResolved(proposalId, IMarket.Outcome.Yes);
+
+        market.resolveMarket(proposalId, IMarket.Outcome.Yes);
+
+        IMarket.MarketInfo memory resolvedMarket = market.getMarketInfo(
+            proposalId
+        );
+        assertEq(
+            uint(resolvedMarket.outcome),
+            uint(IMarket.Outcome.Yes),
+            "Incorrect outcome"
+        );
+        assertTrue(resolvedMarket.resolved, "Market not marked as resolved");
+        assertEq(
+            resolvedMarket.resolutionTime,
+            block.timestamp,
+            "Incorrect resolution time"
+        );
+    }
+
+    function test_ResolvingWithDifferentOutcomes() external {
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        vm.prank(address(oracle));
+
+        market.resolveMarket(proposalId, IMarket.Outcome.No);
+
+        IMarket.MarketInfo memory resolvedMarket = market.getMarketInfo(
+            proposalId
+        );
+        assertEq(
+            uint(resolvedMarket.outcome),
+            uint(IMarket.Outcome.No),
+            "Incorrect outcome"
+        );
+
+        // Create and resolve another market with Unresolved outcome
+        bytes32 proposalId2 = keccak256("testProposal2");
+        vm.prank(address(dao));
+        market.createMarket(proposalId2, tradingPeriod);
+
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        vm.prank(address(oracle));
+        market.resolveMarket(proposalId2, IMarket.Outcome.Unresolved);
+
+        IMarket.MarketInfo memory resolvedMarket2 = market.getMarketInfo(
+            proposalId2
+        );
+        assertEq(
+            uint(resolvedMarket2.outcome),
+            uint(IMarket.Outcome.Unresolved),
+            "Incorrect outcome"
+        );
+    }
+
+    function test_ResolvingImmediatelyAfterTradingPeriod() external {
+        vm.warp(block.timestamp + tradingPeriod);
+        vm.prank(address(oracle));
+        vm.expectRevert("Trading period has not ended");
+        market.resolveMarket(proposalId, IMarket.Outcome.Yes);
+
+        vm.warp(block.timestamp + 1);
+        vm.prank(address(oracle));
+        market.resolveMarket(proposalId, IMarket.Outcome.Yes);
+
+        IMarket.MarketInfo memory resolvedMarket = market.getMarketInfo(
+            proposalId
+        );
+        assertTrue(resolvedMarket.resolved, "Market not marked as resolved");
     }
 }
 
