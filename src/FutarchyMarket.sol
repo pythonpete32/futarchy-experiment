@@ -368,30 +368,6 @@ contract FutarchyMarket is IMarket {
         return winnings;
     }
 
-    /// @notice Calculates the current price of YES shares in a market
-    /// @param proposalId The ID of the proposal associated with the market
-    /// @param position Type of share (true for YES shares, false for NO shares)
-    /// @return The price of YES shares as a fixed-point number with 6 decimal places
-    function getPrice(
-        bytes32 proposalId,
-        bool position
-    ) public view returns (uint256) {
-        // 1. Retrieve market info for proposalId
-        MarketInfo storage market = markets[proposalId];
-
-        // 2. Ensure market exists
-        require(market.creationTime != 0, "Market does not exist");
-
-        // 3. Determine input_reserve and output_reserve based on position:
-        //    - If position is YES: input_reserve = yesReserve, output_reserve = yesShares
-        //    - If position is NO: input_reserve = noReserve, output_reserve = noShares
-        uint256 inputReserve = position ? market.yesReserve : market.noReserve;
-        uint256 outputShares = position ? market.yesShares : market.noShares;
-
-        // 4. Calculate price:
-        return (inputReserve * PRICE_PRECISION) / outputShares;
-    }
-
     /// @notice Retrieves the current position of a user in a market
     /// @param proposalId The ID of the proposal associated with the market
     /// @param user The address of the user

@@ -606,25 +606,6 @@ contract ClaimWinningsTest is FutarchyMarketTestBase {
     }
 }
 
-contract GetPriceTest is FutarchyMarketTestBase {
-    function setUp() public override {
-        super.setUp();
-        // Additional setup for get yes price tests
-    }
-
-    function test_RevertWhen_MarketDoesntExist() external {
-        // It should revert with a market not found error.
-    }
-
-    function test_WhenNoSharesHaveBeenBought() external {
-        // It should return 500000 (50%).
-    }
-
-    function test_WhenSharesHaveBeenBought() external {
-        // It should return the correct price based on the share ratio.
-    }
-}
-
 contract GetPositionTest is FutarchyMarketTestBase {
     function setUp() public override {
         super.setUp();

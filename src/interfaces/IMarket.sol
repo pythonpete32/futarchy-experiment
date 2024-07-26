@@ -100,11 +100,6 @@ interface IMarket {
 
     function claimWinnings(bytes32 proposalId) external;
 
-    function getPrice(
-        bytes32 proposalId,
-        bool position
-    ) external view returns (uint256);
-
     function getPosition(
         bytes32 proposalId,
         address trader
