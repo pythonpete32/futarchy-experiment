@@ -156,27 +156,63 @@ contract FutarchyMarket is IMarket {
         bool position,
         uint256 shareAmount
     ) external {
-        // TODO: Implement share selling logic
         // 1. Retrieve market info for proposalId
+        MarketInfo storage market = markets[proposalId];
+
         // 2. Ensure the market exists and is within the trading period
         // 3. Ensure user has enough shares to sell
+        require(market.creationTime != 0, "Market does not exist");
+        require(!market.resolved, "Market is already resolved");
+        require(
+            block.timestamp <= market.creationTime + market.tradingPeriod,
+            "Trading period has ended"
+        );
+
         // 4. Determine input_reserve and output_reserve based on position:
-        //    - If position is YES: input_reserve = yesShares, output_reserve = yesReserve
-        //    - If position is NO: input_reserve = noShares, output_reserve = noReserve
+        Position storage userPosition = positions[proposalId][msg.sender];
+        if (position) {
+            require(
+                userPosition.yesShares >= shareAmount,
+                "Insufficient YES shares"
+            );
+        } else {
+            require(
+                userPosition.noShares >= shareAmount,
+                "Insufficient NO shares"
+            );
+        }
+
         // 5. Calculate tokens to return:
-        //    tokens = (shareAmount * output_reserve) / (input_reserve - shareAmount)
+        (uint256 tokensToReceive, ) = getTokensOutAmount(
+            proposalId,
+            position,
+            shareAmount
+        );
+
         // 6. Update market state:
-        //    - If position is YES:
-        //      yesReserve -= tokens
-        //      yesShares -= shareAmount
-        //    - If position is NO:
-        //      noReserve -= tokens
-        //      noShares -= shareAmount
-        // 7. Update user's position in positions mapping:
-        //    - If position is YES: positions[proposalId][msg.sender].yesShares -= shareAmount
-        //    - If position is NO: positions[proposalId][msg.sender].noShares -= shareAmount
+        if (position) {
+            market.yesReserve -= tokensToReceive;
+            market.yesShares -= shareAmount;
+            userPosition.yesShares -= shareAmount;
+        } else {
+            market.noReserve -= tokensToReceive;
+            market.noShares -= shareAmount;
+            userPosition.noShares -= shareAmount;
+        }
         // 8. Transfer tokens of governanceTokens to user
+        require(
+            governanceToken.transfer(msg.sender, tokensToReceive),
+            "Failed to transfer tokens"
+        );
+
         // 9. Emit SharesSold event
+        emit SharesSold(
+            proposalId,
+            msg.sender,
+            position,
+            shareAmount,
+            tokensToReceive
+        );
     }
 
     /// @notice Calculates the amount of shares that would be received for a given input amount
@@ -202,6 +238,28 @@ contract FutarchyMarket is IMarket {
         effectivePrice = (amount * PRICE_PRECISION) / sharesReceived;
 
         return (sharesReceived, effectivePrice);
+    }
+
+    /// @notice Calculates the amount of tokens that would be received for selling a given amount of shares
+    /// @param proposalId The ID of the proposal associated with the market
+    /// @param position Type of share (true for YES shares, false for NO shares)
+    /// @param shareAmount The number of shares to sell
+    /// @return tokensToReceive The amount of tokens that would be received
+    /// @return effectivePrice The effective price per share, accounting for slippage
+    function getTokensOutAmount(
+        bytes32 proposalId,
+        bool position,
+        uint256 shareAmount
+    ) public view returns (uint256 tokensToReceive, uint256 effectivePrice) {
+        MarketInfo storage market = markets[proposalId];
+        require(market.creationTime != 0, "Market does not exist");
+        uint256 inputShares = position ? market.yesShares : market.noShares;
+        uint256 outputReserve = position ? market.yesReserve : market.noReserve;
+
+        tokensToReceive = (shareAmount * outputReserve) / inputShares;
+        effectivePrice = (tokensToReceive * PRICE_PRECISION) / shareAmount;
+
+        return (tokensToReceive, effectivePrice);
     }
 
     /// @notice Resolves a market with the final outcome

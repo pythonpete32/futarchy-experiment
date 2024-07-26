@@ -90,8 +90,14 @@ contract CreateMarketTest is FutarchyMarketTestBase {
         assertEq(marketInfo.creationTime, block.timestamp);
         assertEq(marketInfo.resolved, false);
         assertEq(uint(marketInfo.outcome), uint(IMarket.Outcome.Unresolved));
-        assertEq(marketInfo.yesShares, 0);
-        assertEq(marketInfo.noShares, 0);
+        assertEq(
+            marketInfo.yesShares,
+            FutarchyMarket(market).INITIAL_LIQUIDITY()
+        );
+        assertEq(
+            marketInfo.noShares,
+            FutarchyMarket(market).INITIAL_LIQUIDITY()
+        );
         assertEq(
             marketInfo.yesReserve,
             FutarchyMarket(market).INITIAL_LIQUIDITY()
@@ -215,33 +221,161 @@ contract BuySharesTest is FutarchyMarketTestBase {
 }
 
 contract SellSharesTest is FutarchyMarketTestBase {
+    bytes32 proposalId;
+    uint256 tradingPeriod;
+    uint256 constant INITIAL_BALANCE = 1000 * 10 ** 18;
+    uint256 constant BUY_AMOUNT = 100 * 10 ** 18;
+
     function setUp() public override {
         super.setUp();
-        // Additional setup for sell shares tests
+        proposalId = keccak256("testProposal");
+        tradingPeriod = 7 days;
+
+        vm.prank(address(dao));
+        market.createMarket(proposalId, tradingPeriod);
+
+        // Buy some shares for testing
+        vm.prank(alice);
+        market.buyShares(proposalId, true, BUY_AMOUNT);
     }
 
     function test_RevertWhen_MarketDoesntExist() external {
-        // It should revert with a market not found error.
+        bytes32 nonExistentProposalId = keccak256("nonExistentProposal");
+        vm.prank(alice);
+        vm.expectRevert("Market does not exist");
+        market.sellShares(nonExistentProposalId, true, 10 * 10 ** 18);
     }
 
     function test_RevertWhen_TradingPeriodHasEnded() external {
-        // It should revert with a trading period ended error.
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        vm.prank(alice);
+        vm.expectRevert("Trading period has ended");
+        market.sellShares(proposalId, true, 10 * 10 ** 18);
     }
 
     function test_RevertWhen_MarketIsAlreadyResolved() external {
-        // It should revert with a market already resolved error.
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        oracle.resolveMarket(address(market), proposalId, IMarket.Outcome.Yes);
+
+        vm.prank(alice);
+        vm.expectRevert("Market is already resolved");
+        market.sellShares(proposalId, true, 10 * 10 ** 18);
     }
 
     function test_RevertWhen_UserDoesntHaveEnoughShares() external {
-        // It should revert with an insufficient shares error.
+        IMarket.Position memory alicePosition = market.getPosition(
+            proposalId,
+            alice
+        );
+        uint256 excessiveAmount = alicePosition.yesShares + 1;
+
+        vm.prank(alice);
+        vm.expectRevert("Insufficient YES shares");
+        market.sellShares(proposalId, true, excessiveAmount);
     }
 
     function test_WhenAllConditionsAreMet() external {
-        // It should process the share sale correctly.
-        // It should burn the shares from the user.
-        // It should transfer tokens to the user.
-        // It should update the market's share counts.
-        // It should emit a SharesSold event.
+        IMarket.Position memory alicePositionBefore = market.getPosition(
+            proposalId,
+            alice
+        );
+        uint256 sellAmount = alicePositionBefore.yesShares / 2;
+        uint256 aliceBalanceBefore = governanceToken.balanceOf(alice);
+        IMarket.MarketInfo memory marketInfoBefore = market.getMarketInfo(
+            proposalId
+        );
+
+        (uint256 expectedTokensToReceive, ) = market.getTokensOutAmount(
+            proposalId,
+            true,
+            sellAmount
+        );
+
+        vm.prank(alice);
+        vm.expectEmit(true, true, true, true);
+        emit IMarket.SharesSold(
+            proposalId,
+            alice,
+            true,
+            sellAmount,
+            expectedTokensToReceive
+        );
+        market.sellShares(proposalId, true, sellAmount);
+
+        // Check token transfer
+        uint256 aliceBalanceAfter = governanceToken.balanceOf(alice);
+        assertEq(
+            aliceBalanceAfter,
+            aliceBalanceBefore + expectedTokensToReceive,
+            "Incorrect token transfer to user"
+        );
+
+        // Check share burning and market update
+        IMarket.Position memory alicePositionAfter = market.getPosition(
+            proposalId,
+            alice
+        );
+        assertEq(
+            alicePositionAfter.yesShares,
+            alicePositionBefore.yesShares - sellAmount,
+            "Shares not burned from user"
+        );
+
+        IMarket.MarketInfo memory marketInfoAfter = market.getMarketInfo(
+            proposalId
+        );
+        assertEq(
+            marketInfoAfter.yesShares,
+            marketInfoBefore.yesShares - sellAmount,
+            "Market shares not updated correctly"
+        );
+        assertEq(
+            marketInfoAfter.yesReserve,
+            marketInfoBefore.yesReserve - expectedTokensToReceive,
+            "Market reserve not updated correctly"
+        );
+    }
+
+    function test_CorrectTokenCalculation() external {
+        IMarket.Position memory alicePosition = market.getPosition(
+            proposalId,
+            alice
+        );
+        uint256 sellAmount = alicePosition.yesShares / 2;
+
+        (uint256 tokensToReceive, uint256 effectivePrice) = market
+            .getTokensOutAmount(proposalId, true, sellAmount);
+
+        // Ensure tokensToReceive is not zero
+        assertGt(
+            tokensToReceive,
+            0,
+            "Tokens to receive should be greater than zero"
+        );
+
+        // Ensure effectivePrice is reasonable (not zero or extremely high)
+        assertGt(
+            effectivePrice,
+            0,
+            "Effective price should be greater than zero"
+        );
+        assertLt(
+            effectivePrice,
+            1e36,
+            "Effective price should be less than 1e36"
+        );
+
+        // Perform the actual sell
+        vm.prank(alice);
+        market.sellShares(proposalId, true, sellAmount);
+
+        // Check if the received amount matches the calculated amount
+        uint256 aliceBalanceAfter = governanceToken.balanceOf(alice);
+        assertEq(
+            aliceBalanceAfter,
+            INITIAL_BALANCE - BUY_AMOUNT + tokensToReceive,
+            "Received token amount doesn't match calculated amount"
+        );
     }
 }
 
