@@ -607,16 +607,167 @@ contract ClaimWinningsTest is FutarchyMarketTestBase {
 }
 
 contract GetPositionTest is FutarchyMarketTestBase {
+    bytes32 proposalId;
+    uint256 tradingPeriod;
+    uint256 constant BUY_AMOUNT = 100 * 10 ** 18;
+
     function setUp() public override {
         super.setUp();
-        // Additional setup for get position tests
+        proposalId = keccak256("testProposal");
+        tradingPeriod = 7 days;
+
+        vm.prank(address(dao));
+        market.createMarket(proposalId, tradingPeriod);
     }
 
     function test_RevertWhen_MarketDoesntExist() external {
-        // It should revert with a market not found error.
+        bytes32 nonExistentProposalId = keccak256("nonExistentProposal");
+        vm.expectRevert("Market does not exist");
+        market.getPosition(nonExistentProposalId, alice);
     }
 
     function test_WhenMarketExists() external {
-        // It should return the correct position for the given user.
+        // Buy YES shares
+        vm.prank(alice);
+        market.buyShares(proposalId, true, BUY_AMOUNT);
+
+        // Buy NO shares
+        vm.prank(bob);
+        market.buyShares(proposalId, false, BUY_AMOUNT);
+
+        // Check Alice's position
+        IMarket.Position memory alicePosition = market.getPosition(
+            proposalId,
+            alice
+        );
+        assertGt(alicePosition.yesShares, 0, "Alice should have YES shares");
+        assertEq(alicePosition.noShares, 0, "Alice should have no NO shares");
+
+        // Check Bob's position
+        IMarket.Position memory bobPosition = market.getPosition(
+            proposalId,
+            bob
+        );
+        assertEq(bobPosition.yesShares, 0, "Bob should have no YES shares");
+        assertGt(bobPosition.noShares, 0, "Bob should have NO shares");
+
+        // Check Charlie's position (who hasn't bought any shares)
+        IMarket.Position memory charliePosition = market.getPosition(
+            proposalId,
+            charlie
+        );
+        assertEq(
+            charliePosition.yesShares,
+            0,
+            "Charlie should have no YES shares"
+        );
+        assertEq(
+            charliePosition.noShares,
+            0,
+            "Charlie should have no NO shares"
+        );
+    }
+
+    function test_PositionAfterMultipleTrades() external {
+        // Alice buys YES shares
+        vm.prank(alice);
+        market.buyShares(proposalId, true, BUY_AMOUNT);
+
+        // Alice buys more YES shares
+        vm.prank(alice);
+        market.buyShares(proposalId, true, BUY_AMOUNT / 2);
+
+        // Alice buys some NO shares
+        vm.prank(alice);
+        market.buyShares(proposalId, false, BUY_AMOUNT / 4);
+
+        IMarket.Position memory alicePosition = market.getPosition(
+            proposalId,
+            alice
+        );
+        assertGt(alicePosition.yesShares, 0, "Alice should have YES shares");
+        assertGt(alicePosition.noShares, 0, "Alice should have NO shares");
+        assertGt(
+            alicePosition.yesShares,
+            alicePosition.noShares,
+            "Alice should have more YES shares than NO shares"
+        );
+    }
+
+    function test_PositionAfterSellingShares() external {
+        // Alice buys YES shares
+        vm.prank(alice);
+        market.buyShares(proposalId, true, BUY_AMOUNT);
+
+        IMarket.Position memory positionBeforeSelling = market.getPosition(
+            proposalId,
+            alice
+        );
+
+        // Alice sells half of her YES shares
+        uint256 sharesToSell = positionBeforeSelling.yesShares / 2;
+        vm.prank(alice);
+        market.sellShares(proposalId, true, sharesToSell);
+
+        IMarket.Position memory positionAfterSelling = market.getPosition(
+            proposalId,
+            alice
+        );
+        assertEq(
+            positionAfterSelling.yesShares,
+            positionBeforeSelling.yesShares - sharesToSell,
+            "Alice's YES shares should decrease after selling"
+        );
+        assertEq(
+            positionAfterSelling.noShares,
+            0,
+            "Alice's NO shares should remain zero"
+        );
+    }
+
+    function test_PositionInMultipleMarkets() external {
+        // Create a second market
+        bytes32 proposalId2 = keccak256("testProposal2");
+        vm.prank(address(dao));
+        market.createMarket(proposalId2, tradingPeriod);
+
+        // Alice buys YES shares in first market
+        vm.prank(alice);
+        market.buyShares(proposalId, true, BUY_AMOUNT);
+
+        // Alice buys NO shares in second market
+        vm.prank(alice);
+        market.buyShares(proposalId2, false, BUY_AMOUNT);
+
+        IMarket.Position memory alicePosition1 = market.getPosition(
+            proposalId,
+            alice
+        );
+        IMarket.Position memory alicePosition2 = market.getPosition(
+            proposalId2,
+            alice
+        );
+
+        assertGt(
+            alicePosition1.yesShares,
+            0,
+            "Alice should have YES shares in first market"
+        );
+        assertEq(
+            alicePosition1.noShares,
+            0,
+            "Alice should have no NO shares in first market"
+        );
+
+        assertEq(
+            alicePosition2.yesShares,
+            0,
+            "Alice should have no YES shares in second market"
+        );
+        assertGt(
+            alicePosition2.noShares,
+            0,
+            "Alice should have NO shares in second market"
+        );
     }
 }
