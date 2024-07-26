@@ -15,6 +15,9 @@ contract FutarchyMarket is IMarket {
     /// @dev This is added by the DAO when creating a market to smooth out initial price volatility
     uint256 public constant INITIAL_LIQUIDITY = 1000 * 10 ** 18;
 
+    /// @notice Precision factor for price calculations. The price is represented as a fixed-point number with x decimal places.
+    uint256 public constant PRICE_PRECISION = 1e18;
+
     /// @notice The address of the DAO contract
     address public immutable daoAddress;
 
@@ -46,22 +49,45 @@ contract FutarchyMarket is IMarket {
     /// @param tradingPeriod The duration of the trading period
     /// @dev Only the DAO contract can call this function
     function createMarket(bytes32 proposalId, uint256 tradingPeriod) external {
-        // TODO: Implement market creation logic
         // 1. Verify that the caller is the DAO contract (msg.sender == daoAddress)
+        require(msg.sender == daoAddress, "Caller is not the DAO");
+
         // 2. Ensure the market doesn't already exist (markets[proposalId].creationTime == 0)
-        // 3. Create a new MarketInfo struct:
-        //    - proposalId = proposalId
-        //    - creationTime = current block timestamp
-        //    - tradingPeriod = tradingPeriod
-        //    - resolved = false
-        //    - outcome = Outcome.Unresolved
-        //    - yesShares = 0
-        //    - noShares = 0
-        //    - yesReserve = INITIAL_LIQUIDITY
-        //    - noReserve = INITIAL_LIQUIDITY
-        // 4. Store the new MarketInfo in markets[proposalId]
-        // 5. Transfer INITIAL_LIQUIDITY * 2 tokens from the DAO to this contract
+        require(markets[proposalId].creationTime == 0, "Market already exists");
+
+        // 3. Transfer INITIAL_LIQUIDITY * 2 tokens from the DAO to this contract
+        require(
+            governanceToken.transferFrom(
+                daoAddress,
+                address(this),
+                INITIAL_LIQUIDITY * 2
+            ),
+            "Failed to transfer initial liquidity"
+        );
+
+        // 4. Create a new MarketInfo struct:
+        MarketInfo memory newMarket = MarketInfo({
+            proposalId: proposalId,
+            creationTime: block.timestamp,
+            tradingPeriod: tradingPeriod,
+            resolved: false,
+            outcome: Outcome.Unresolved,
+            yesShares: INITIAL_LIQUIDITY,
+            noShares: INITIAL_LIQUIDITY,
+            yesReserve: INITIAL_LIQUIDITY,
+            noReserve: INITIAL_LIQUIDITY,
+            resolutionTime: 0
+        });
+
+        // 5. Store the new MarketInfo in markets[proposalId]
+        markets[proposalId] = newMarket;
+
+        // 6. Mint initial shares to the DAO
+        positions[proposalId][daoAddress].yesShares += INITIAL_LIQUIDITY;
+        positions[proposalId][daoAddress].noShares += INITIAL_LIQUIDITY;
+
         // 6. Emit MarketCreated event
+        emit MarketCreated(proposalId, tradingPeriod);
     }
 
     /// @notice Allows a user to buy shares in a market
@@ -73,26 +99,52 @@ contract FutarchyMarket is IMarket {
         bool position,
         uint256 amount
     ) external {
-        // TODO: Implement share buying logic
         // 1. Retrieve market info for proposalId
+        MarketInfo storage market = markets[proposalId];
+
         // 2. Ensure the market exists and is within the trading period
-        // 3. Determine input_reserve and output_reserve based on position:
-        //    - If position is YES: input_reserve = yesReserve, output_reserve = yesShares
-        //    - If position is NO: input_reserve = noReserve, output_reserve = noShares
-        // 4. Calculate shares to mint:
-        //    shares = (inputAmount * output_reserve) / (input_reserve + inputAmount)
-        // 5. Update market state:
-        //    - If position is YES:
-        //      yesReserve += inputAmount
-        //      yesShares += shares
-        //    - If position is NO:
-        //      noReserve += inputAmount
-        //      noShares += shares
+        require(!market.resolved, "Market is already resolved");
+        require(market.creationTime != 0, "Market does not exist");
+        require(
+            block.timestamp <= market.creationTime + market.tradingPeriod,
+            "Trading period has ended"
+        );
+
         // 6. Transfer inputAmount of governanceTokens from user to contract
-        // 7. Update user's position in positions mapping:
-        //    - If position is YES: positions[proposalId][msg.sender].yesShares += shares
-        //    - If position is NO: positions[proposalId][msg.sender].noShares += shares
+        require(
+            governanceToken.transferFrom(msg.sender, address(this), amount),
+            "Failed to transfer tokens"
+        );
+
+        (uint256 sharesToMint, ) = getSharesOutAmount(
+            proposalId,
+            position,
+            amount
+        );
+
+        require(sharesToMint > 0, "Insufficient shares to mint");
+
+        // 5. Update market state:
+        if (position) {
+            market.yesReserve += amount;
+            market.yesShares += sharesToMint;
+
+            positions[proposalId][msg.sender].yesShares += sharesToMint;
+        } else {
+            market.noReserve += amount;
+            market.noShares += sharesToMint;
+            // If position is NO: positions[proposalId][msg.sender].noShares += shares
+            positions[proposalId][msg.sender].noShares += sharesToMint;
+        }
+
         // 8. Emit SharesBought event
+        emit SharesBought(
+            proposalId,
+            msg.sender,
+            position,
+            sharesToMint,
+            amount
+        );
     }
 
     /// @notice Allows a user to sell shares in a market
@@ -127,20 +179,56 @@ contract FutarchyMarket is IMarket {
         // 9. Emit SharesSold event
     }
 
+    /// @notice Calculates the amount of shares that would be received for a given input amount
+    /// @param proposalId The ID of the proposal associated with the market
+    /// @param position Type of share (true for YES shares, false for NO shares)
+    /// @param amount The amount of governance tokens to spend
+    /// @return sharesReceived The amount of shares that would be received
+    /// @return effectivePrice The effective price per share, accounting for slippage
+    function getSharesOutAmount(
+        bytes32 proposalId,
+        bool position,
+        uint256 amount
+    ) public view returns (uint256 sharesReceived, uint256 effectivePrice) {
+        MarketInfo storage market = markets[proposalId];
+        require(market.creationTime != 0, "Market does not exist");
+
+        uint256 inputReserve = position ? market.yesReserve : market.noReserve;
+        uint256 outputShares = position ? market.yesShares : market.noShares;
+
+        sharesReceived = (amount * outputShares) / (inputReserve + amount);
+
+        // Calculate effective price, considering PRICE_PRECISION
+        effectivePrice = (amount * PRICE_PRECISION) / sharesReceived;
+
+        return (sharesReceived, effectivePrice);
+    }
+
     /// @notice Resolves a market with the final outcome
     /// @param proposalId The ID of the proposal associated with the market
     /// @param outcome The final outcome of the market
     /// @dev Only the oracle can call this function
     function resolveMarket(bytes32 proposalId, Outcome outcome) external {
-        // TODO: Implement market resolution logic
         // 1. Ensure caller is oracle
+        require(msg.sender == oracle, "Caller is not the oracle");
+
         // 2. Retrieve market info for proposalId
+        MarketInfo storage market = markets[proposalId];
+
         // 3. Ensure market exists and is not already resolved
+        require(market.creationTime != 0, "Market does not exist");
+        require(!market.resolved, "Market is already resolved");
+        require(
+            block.timestamp > market.creationTime + market.tradingPeriod,
+            "Trading period has not ended"
+        );
         // 4. Update market:
-        //    - resolved = true
-        //    - resolutionTime = current block timestamp
-        //    - outcome = outcome
+        market.resolved = true;
+        market.resolutionTime = block.timestamp;
+        market.outcome = outcome;
+
         // 5. Emit MarketResolved event
+        emit MarketResolved(proposalId, outcome);
     }
 
     /// @notice Allows a user to claim their winnings from a resolved market
@@ -166,15 +254,20 @@ contract FutarchyMarket is IMarket {
         bytes32 proposalId,
         bool position
     ) public view returns (uint256) {
-        // TODO: Implement price calculation logic
         // 1. Retrieve market info for proposalId
+        MarketInfo storage market = markets[proposalId];
+
         // 2. Ensure market exists
+        require(market.creationTime != 0, "Market does not exist");
+
         // 3. Determine input_reserve and output_reserve based on position:
         //    - If position is YES: input_reserve = yesReserve, output_reserve = yesShares
         //    - If position is NO: input_reserve = noReserve, output_reserve = noShares
+        uint256 inputReserve = position ? market.yesReserve : market.noReserve;
+        uint256 outputShares = position ? market.yesShares : market.noShares;
+
         // 4. Calculate price:
-        //    price = (input_reserve * 10^6) / output_reserve
-        // 5. Return calculated price
+        return (inputReserve * PRICE_PRECISION) / outputShares;
     }
 
     /// @notice Retrieves the current position of a user in a market
@@ -185,17 +278,24 @@ contract FutarchyMarket is IMarket {
         bytes32 proposalId,
         address user
     ) external view returns (Position memory) {
-        // TODO: Implement position retrieval logic
+        require(markets[proposalId].creationTime != 0, "Market does not exist");
+        return positions[proposalId][user];
     }
 
     /// @notice Allows the DAO to update the oracle address
     /// @param newOracle The address of the new oracle
     /// @dev Only the DAO contract can call this function
     function updateOracle(address newOracle) external {
-        // TODO: Implement oracle update logic
+        require(msg.sender == daoAddress, "Caller is not the DAO");
+        require(newOracle != address(0), "Invalid oracle address");
+        oracle = newOracle;
+        emit OracleUpdated(newOracle);
     }
 
     function getMarketInfo(
         bytes32 proposalId
-    ) external view override returns (MarketInfo memory) {}
+    ) external view override returns (MarketInfo memory) {
+        require(markets[proposalId].creationTime != 0, "Market does not exist");
+        return markets[proposalId];
+    }
 }

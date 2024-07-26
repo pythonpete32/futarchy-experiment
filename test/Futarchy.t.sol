@@ -2,16 +2,17 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IDAO, DAO} from "../src/mocks/MockDAO.sol";
 import {IMarket, FutarchyMarket} from "../src/FutarchyMarket.sol";
-import {Oracle} from "../src/mocks/MockOracle.sol";
+import {MockOracle, IOracle} from "../src/mocks/MockOracle.sol";
 import {MockGovernanceToken} from "../src/mocks/MockGovernanceToken.sol";
 
 abstract contract FutarchyMarketTestBase is Test {
     FutarchyMarket market;
     MockGovernanceToken governanceToken;
     DAO dao;
-    address oracle;
+    IOracle oracle;
 
     address alice = address(0x1);
     address bob = address(0x2);
@@ -20,22 +21,26 @@ abstract contract FutarchyMarketTestBase is Test {
     function setUp() public virtual {
         governanceToken = new MockGovernanceToken();
         dao = new DAO();
-        oracle = address(0x4);
+        oracle = IOracle(new MockOracle());
+
         market = new FutarchyMarket(
             address(governanceToken),
             address(dao),
-            oracle
+            address(oracle)
         );
 
-        governanceToken.mint(alice, 1000000 * 10 ** 18);
-        governanceToken.mint(bob, 1000000 * 10 ** 18);
-        governanceToken.mint(charlie, 1000000 * 10 ** 18);
+        governanceToken.mint(alice, 1000 * 10 ** 18);
+        governanceToken.mint(bob, 1000 * 10 ** 18);
+        governanceToken.mint(charlie, 1000 * 10 ** 18);
+        governanceToken.mint(address(dao), 10000 * 10 ** 18);
 
         vm.prank(alice);
         governanceToken.approve(address(market), type(uint256).max);
         vm.prank(bob);
         governanceToken.approve(address(market), type(uint256).max);
         vm.prank(charlie);
+        governanceToken.approve(address(market), type(uint256).max);
+        vm.prank(address(dao));
         governanceToken.approve(address(market), type(uint256).max);
     }
 }
@@ -46,47 +51,166 @@ contract CreateMarketTest is FutarchyMarketTestBase {
     }
 
     function test_RevertWhen_CallerIsNotDAO() external {
-        // It should revert with an unauthorized error.
+        bytes32 proposalId = keccak256("proposal1");
+        uint256 tradingPeriod = 7 days;
+
+        vm.prank(alice);
+        vm.expectRevert("Caller is not the DAO");
+        market.createMarket(proposalId, tradingPeriod);
     }
 
     function test_RevertWhen_MarketAlreadyExists() external {
-        // It should revert with a market already exists error.
+        bytes32 proposalId = keccak256("proposal1");
+        uint256 tradingPeriod = 7 days;
+
+        vm.prank(address(dao));
+        market.createMarket(proposalId, tradingPeriod);
+
+        vm.prank(address(dao));
+        vm.expectRevert("Market already exists");
+        market.createMarket(proposalId, tradingPeriod);
     }
 
     function test_WhenCallerIsDAOAndMarketDoesntExist() external {
-        // It should create a new market with the given parameters.
-        // It should emit a MarketCreated event.
+        bytes32 proposalId = keccak256(abi.encode(block.timestamp));
+        uint256 tradingPeriod = 7 days;
+
+        vm.prank(address(dao));
+        vm.expectEmit(true, true, true, true);
+        emit IMarket.MarketCreated(proposalId, tradingPeriod);
+        market.createMarket(proposalId, tradingPeriod);
+
+        IMarket.MarketInfo memory marketInfo = market.getMarketInfo(proposalId);
+        assertEq(
+            marketInfo.proposalId,
+            proposalId,
+            "ProposalID not saved correctly"
+        );
+        assertEq(marketInfo.tradingPeriod, tradingPeriod);
+        assertEq(marketInfo.creationTime, block.timestamp);
+        assertEq(marketInfo.resolved, false);
+        assertEq(uint(marketInfo.outcome), uint(IMarket.Outcome.Unresolved));
+        assertEq(marketInfo.yesShares, 0);
+        assertEq(marketInfo.noShares, 0);
+        assertEq(
+            marketInfo.yesReserve,
+            FutarchyMarket(market).INITIAL_LIQUIDITY()
+        );
+        assertEq(
+            marketInfo.noReserve,
+            FutarchyMarket(market).INITIAL_LIQUIDITY()
+        );
     }
 }
 
 contract BuySharesTest is FutarchyMarketTestBase {
+    bytes32 proposalId;
+    uint256 tradingPeriod;
+
     function setUp() public override {
         super.setUp();
-        // Additional setup for buy shares tests
+        proposalId = keccak256("testProposal");
+        tradingPeriod = 7 days;
+
+        vm.prank(address(dao));
+        market.createMarket(proposalId, tradingPeriod);
     }
 
     function test_RevertWhen_MarketDoesntExist() external {
-        // It should revert with a market not found error.
+        bytes32 nonExistentProposalId = keccak256("nonExistentProposal");
+        vm.prank(alice);
+        vm.expectRevert("Market does not exist");
+        market.buyShares(nonExistentProposalId, true, 100 * 10 ** 18);
     }
 
     function test_RevertWhen_TradingPeriodHasEnded() external {
-        // It should revert with a trading period ended error.
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        vm.prank(alice);
+        vm.expectRevert("Trading period has ended");
+        market.buyShares(proposalId, true, 100 * 10 ** 18);
     }
 
     function test_RevertWhen_MarketIsAlreadyResolved() external {
-        // It should revert with a market already resolved error.
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        oracle.resolveMarket(address(market), proposalId, IMarket.Outcome.Yes);
+
+        vm.prank(alice);
+        vm.expectRevert("Market is already resolved");
+        market.buyShares(proposalId, true, 100 * 10 ** 18);
     }
 
     function test_RevertWhen_UserDoesntHaveEnoughTokens() external {
-        // It should revert with an insufficient balance error.
+        uint256 excessiveAmount = 2000 * 10 ** 18; // Alice only has 1000 tokens
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IERC20Errors.ERC20InsufficientBalance.selector,
+                alice,
+                1000 * 10 ** 18,
+                excessiveAmount
+            )
+        );
+        market.buyShares(proposalId, true, excessiveAmount);
     }
 
     function test_WhenAllConditionsAreMet() external {
-        // It should process the share purchase correctly.
-        // It should transfer tokens from the user to the contract.
-        // It should mint the correct amount of shares to the user.
-        // It should update the market's share counts.
-        // It should emit a SharesBought event.
+        uint256 buyAmount = 10 * 10 ** 18;
+        (uint256 sharesToMint, ) = market.getSharesOutAmount(
+            proposalId,
+            true,
+            buyAmount
+        );
+        uint256 aliceBalanceBefore = governanceToken.balanceOf(alice);
+        uint256 marketBalanceBefore = governanceToken.balanceOf(
+            address(market)
+        );
+        IMarket.MarketInfo memory marketInfoBefore = market.getMarketInfo(
+            proposalId
+        );
+        uint256 sharesBefore = marketInfoBefore.yesShares;
+
+        vm.prank(alice);
+        vm.expectEmit(true, true, true, true);
+
+        emit IMarket.SharesBought(
+            proposalId,
+            alice,
+            true,
+            sharesToMint,
+            buyAmount
+        );
+        market.buyShares(proposalId, true, buyAmount);
+
+        // Check token transfer
+        assertEq(
+            governanceToken.balanceOf(alice),
+            aliceBalanceBefore - buyAmount,
+            "Incorrect token transfer from user"
+        );
+        assertEq(
+            governanceToken.balanceOf(address(market)),
+            marketBalanceBefore + buyAmount,
+            "Incorrect token transfer to market"
+        );
+
+        // Check share minting and market update
+        IMarket.Position memory alicePosition = market.getPosition(
+            proposalId,
+            alice
+        );
+        assertGt(alicePosition.yesShares, 0, "Shares not minted to user");
+
+        IMarket.MarketInfo memory marketInfo = market.getMarketInfo(proposalId);
+        assertEq(
+            marketInfo.yesShares - sharesBefore,
+            alicePosition.yesShares,
+            "Market shares not updated correctly"
+        );
+        assertEq(
+            marketInfo.yesReserve,
+            FutarchyMarket(market).INITIAL_LIQUIDITY() + buyAmount,
+            "Market reserve not updated correctly"
+        );
     }
 }
 
@@ -178,7 +302,7 @@ contract ClaimWinningsTest is FutarchyMarketTestBase {
     }
 }
 
-contract GetYesPriceTest is FutarchyMarketTestBase {
+contract GetPriceTest is FutarchyMarketTestBase {
     function setUp() public override {
         super.setUp();
         // Additional setup for get yes price tests
@@ -211,148 +335,3 @@ contract GetPositionTest is FutarchyMarketTestBase {
         // It should return the correct position for the given user.
     }
 }
-
-// contract FutarchyTest is Test {
-//     IDAO dao;
-//     IMarket market;
-//     MockGovernanceToken governanceToken;
-//     address oracle = address(0x04ac1e);
-
-//     address alice = address(0x1);
-//     address bob = address(0x2);
-//     address charlie = address(0x3);
-
-//     function setUp() public {
-//         governanceToken = new MockGovernanceToken();
-//         dao = new DAO();
-//         oracle = address(0x2);
-//         market = new FutarchyMarket(
-//             address(governanceToken),
-//             address(dao),
-//             address(oracle)
-//         );
-
-//         governanceToken.mint(alice, 1000000 * 10 ** 18);
-//         governanceToken.mint(bob, 1000000 * 10 ** 18);
-//         governanceToken.mint(charlie, 1000000 * 10 ** 18);
-
-//         vm.prank(alice);
-//         governanceToken.approve(address(market), type(uint256).max);
-//         vm.prank(bob);
-//         governanceToken.approve(address(market), type(uint256).max);
-//         vm.prank(charlie);
-//         governanceToken.approve(address(market), type(uint256).max);
-//     }
-
-//     function testCreateProposal() public {
-//         vm.prank(alice);
-//         bytes32 proposalId = dao.createProposal("Test Proposal", 1 days);
-//         IDAO.Proposal memory proposal = dao.getProposal(proposalId);
-//         assertEq(proposal.proposer, alice);
-//         assertEq(proposal.description, "Test Proposal");
-//         assertEq(proposal.votingEndTime, block.timestamp + 1 days);
-//     }
-
-//     function testCreateMarket() public {
-//         bytes32 proposalId = _createProposal();
-
-//         vm.prank(address(dao));
-//         market.createMarket(proposalId, 1000 * 10 ** 18, 2 days);
-
-//         IMarket.MarketInfo memory marketInfo = market.getMarketInfo(proposalId);
-//         assertEq(marketInfo.proposalId, proposalId);
-//         assertEq(marketInfo.tradingPeriod, 2 days);
-//         assertEq(marketInfo.virtualReserve, 1000 * 10 ** 18);
-//         assertEq(marketInfo.resolved, false);
-//     }
-
-//     function testBuyShares() public {
-//         bytes32 proposalId = _createProposalAndMarket();
-
-//         vm.prank(bob);
-//         market.buyShares(proposalId, true, 100 * 10 ** 18);
-
-//         IMarket.Position memory position = market.getPosition(proposalId, bob);
-//         assertGt(position.yesShares, 0);
-//         assertEq(position.noShares, 0);
-
-//         uint256 yesPrice = market.getYesPrice(proposalId);
-//         assertGt(yesPrice, 500000); // Price should be higher than 50%
-//     }
-
-//     function testSellShares() public {
-//         bytes32 proposalId = _createProposalAndMarket();
-
-//         vm.startPrank(bob);
-//         market.buyShares(proposalId, true, 100 * 10 ** 18);
-//         uint256 initialYesShares = market
-//             .getPosition(proposalId, bob)
-//             .yesShares;
-//         market.sellShares(proposalId, true, initialYesShares / 2);
-//         vm.stopPrank();
-
-//         IMarket.Position memory position = market.getPosition(proposalId, bob);
-//         assertEq(position.yesShares, initialYesShares / 2);
-//     }
-
-//     function testMarketResolution() public {
-//         bytes32 proposalId = _createProposalAndMarket();
-
-//         vm.warp(block.timestamp + 2 days);
-
-//         vm.prank(address(oracle));
-//         market.resolveMarket(proposalId, IMarket.Outcome.Yes);
-
-//         IMarket.MarketInfo memory marketInfo = market.getMarketInfo(proposalId);
-//         assertTrue(marketInfo.resolved);
-//         assertEq(uint(marketInfo.outcome), uint(IMarket.Outcome.Yes));
-//     }
-
-//     function testClaimWinnings() public {
-//         bytes32 proposalId = _createProposalAndMarket();
-
-//         vm.prank(bob);
-//         market.buyShares(proposalId, true, 100 * 10 ** 18);
-
-//         vm.prank(charlie);
-//         market.buyShares(proposalId, false, 100 * 10 ** 18);
-
-//         vm.warp(block.timestamp + 2 days);
-
-//         vm.prank(address(oracle));
-//         market.resolveMarket(proposalId, IMarket.Outcome.Yes);
-
-//         uint256 bobBalanceBefore = governanceToken.balanceOf(bob);
-
-//         vm.prank(bob);
-//         market.claimWinnings(proposalId);
-
-//         uint256 bobBalanceAfter = governanceToken.balanceOf(bob);
-//         assertGt(bobBalanceAfter, bobBalanceBefore);
-//     }
-
-//     function testGetYesPrice() public {
-//         bytes32 proposalId = _createProposalAndMarket();
-
-//         uint256 initialPrice = market.getYesPrice(proposalId);
-//         assertEq(initialPrice, 500000); // 50% initial price
-
-//         vm.prank(bob);
-//         market.buyShares(proposalId, true, 100 * 10 ** 18);
-
-//         uint256 newPrice = market.getYesPrice(proposalId);
-//         assertGt(newPrice, initialPrice);
-//     }
-
-//     function _createProposal() internal returns (bytes32) {
-//         vm.prank(alice);
-//         return dao.createProposal("Test Proposal", 1 days);
-//     }
-
-//     function _createProposalAndMarket() internal returns (bytes32) {
-//         bytes32 proposalId = _createProposal();
-//         vm.prank(address(dao));
-//         market.createMarket(proposalId, 1000 * 10 ** 18, 2 days);
-//         return proposalId;
-//     }
-// }
