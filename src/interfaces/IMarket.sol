@@ -68,6 +68,10 @@ interface IMarket {
     /// @param outcome The final outcome of the market
     event MarketResolved(bytes32 indexed proposalId, Outcome outcome);
 
+    /// @notice Event emitted when the oracle is updated
+    /// @param newOracle address of the new oracle
+    event OracleUpdated(address newOracle);
+
     function createMarket(bytes32 proposalId, uint256 tradingPeriod) external;
 
     function buyShares(
