@@ -72,6 +72,16 @@ interface IMarket {
     /// @param newOracle address of the new oracle
     event OracleUpdated(address newOracle);
 
+    /// @notice Event emitted when winnings are claimed
+    /// @param proposalId The ID of the proposal associated with the market
+    /// @param trader The address of the user claiming winnings
+    /// @param amount The amount of winnings claimed
+    event WinningsClaimed(
+        bytes32 indexed proposalId,
+        address indexed trader,
+        uint256 amount
+    );
+
     function createMarket(bytes32 proposalId, uint256 tradingPeriod) external;
 
     function buyShares(

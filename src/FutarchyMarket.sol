@@ -292,16 +292,80 @@ contract FutarchyMarket is IMarket {
     /// @notice Allows a user to claim their winnings from a resolved market
     /// @param proposalId The ID of the proposal associated with the market
     function claimWinnings(bytes32 proposalId) external {
-        // TODO: Implement winnings claim logic
         // 1. Retrieve market info for proposalId
+        MarketInfo storage market = markets[proposalId];
+
+        uint256 winningShares;
+        uint256 totalWinningShares;
+        uint256 totalReserve = market.yesReserve + market.noReserve;
+
         // 2. Ensure market is resolved
+        require(market.creationTime != 0, "Market does not exist");
+        require(market.resolved, "Market is not resolved");
+
         // 3. Retrieve user's position
+        Position storage userPosition = positions[proposalId][msg.sender];
         // 4. Calculate winnings based on outcome and user's position:
         //    - If outcome is Yes, winnings = user's yesShares * (totalReserve / totalYesShares)
         //    - If outcome is No, winnings = user's noShares * (totalReserve / totalNoShares)
+        if (market.outcome == Outcome.Yes) {
+            winningShares = userPosition.yesShares;
+            totalWinningShares = market.yesShares;
+        } else if (market.outcome == Outcome.No) {
+            winningShares = userPosition.noShares;
+            totalWinningShares = market.noShares;
+        } else {
+            revert("Market outcome is invalid");
+        }
+        require(winningShares > 0, "No winning shares to claim");
+        uint256 winnings = (winningShares * totalReserve) / totalWinningShares;
+
         // 5. Clear user's position
+        userPosition.yesShares = 0;
+        userPosition.noShares = 0;
+
         // 6. Transfer winnings to user
-        // 7. Update market's totalFeesCollected (if applicable)
+        require(
+            governanceToken.transfer(msg.sender, winnings),
+            "Transfer failed"
+        );
+
+        // Transfer winnings to user
+        emit WinningsClaimed(proposalId, msg.sender, winnings);
+    }
+
+    /// @notice Calculates the winnings for a user in a given market
+    /// @param proposalId The ID of the proposal associated with the market
+    /// @param user The address of the user
+    /// @return winnings The amount of winnings the user can claim
+    function calculateWinnings(
+        bytes32 proposalId,
+        address user
+    ) public view returns (uint256 winnings) {
+        MarketInfo storage market = markets[proposalId];
+        require(market.resolved, "Market is not resolved");
+
+        Position storage userPosition = positions[proposalId][user];
+        uint256 winningShares;
+        uint256 totalWinningShares;
+        uint256 totalReserve = market.yesReserve + market.noReserve;
+
+        if (market.outcome == Outcome.Yes) {
+            winningShares = userPosition.yesShares;
+            totalWinningShares = market.yesShares;
+        } else if (market.outcome == Outcome.No) {
+            winningShares = userPosition.noShares;
+            totalWinningShares = market.noShares;
+        } else {
+            return 0; // No winnings if the market outcome is invalid
+        }
+
+        if (winningShares == 0 || totalWinningShares == 0) {
+            return 0;
+        }
+
+        winnings = (winningShares * totalReserve) / totalWinningShares;
+        return winnings;
     }
 
     /// @notice Calculates the current price of YES shares in a market

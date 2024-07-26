@@ -410,29 +410,108 @@ contract ResolveMarketTest is FutarchyMarketTestBase {
 }
 
 contract ClaimWinningsTest is FutarchyMarketTestBase {
+    bytes32 proposalId;
+    uint256 tradingPeriod;
+    uint256 constant BUY_AMOUNT = 100 * 10 ** 18;
+
     function setUp() public override {
         super.setUp();
-        // Additional setup for claim winnings tests
+        proposalId = keccak256("testProposal");
+        tradingPeriod = 7 days;
+
+        vm.prank(address(dao));
+        market.createMarket(proposalId, tradingPeriod);
+
+        // Buy some shares for testing
+        vm.prank(alice);
+        market.buyShares(proposalId, true, BUY_AMOUNT);
+        vm.prank(bob);
+        market.buyShares(proposalId, false, BUY_AMOUNT);
     }
 
     function test_RevertWhen_MarketDoesntExist() external {
-        // It should revert with a market not found error.
+        bytes32 nonExistentProposalId = keccak256("nonExistentProposal");
+        vm.prank(alice);
+        vm.expectRevert("Market does not exist");
+        market.claimWinnings(nonExistentProposalId);
     }
 
     function test_RevertWhen_MarketIsNotResolved() external {
-        // It should revert with a market not resolved error.
+        vm.prank(alice);
+        vm.expectRevert("Market is not resolved");
+        market.claimWinnings(proposalId);
     }
 
     function test_RevertWhen_UserHasNoWinningShares() external {
-        // It should revert with a no winning shares error.
+        // Resolve market with YES outcome
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        oracle.resolveMarket(address(market), proposalId, IMarket.Outcome.Yes);
+
+        // Bob tries to claim winnings but has no YES shares
+        vm.prank(bob);
+        vm.expectRevert("No winning shares to claim");
+        market.claimWinnings(proposalId);
     }
 
     function test_WhenAllConditionsAreMet() external {
-        // It should process the winning claim correctly.
-        // It should calculate the correct payout.
-        // It should transfer tokens to the user.
-        // It should reset the user's position.
-        // It should emit a WinningsClaimed event.
+        // Resolve market with YES outcome
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        oracle.resolveMarket(address(market), proposalId, IMarket.Outcome.Yes);
+
+        uint256 aliceBalanceBefore = governanceToken.balanceOf(alice);
+        uint256 expectedWinnings = market.calculateWinnings(proposalId, alice);
+
+        vm.prank(alice);
+        vm.expectEmit(true, true, true, true);
+        emit IMarket.WinningsClaimed(proposalId, alice, expectedWinnings);
+        market.claimWinnings(proposalId);
+
+        uint256 aliceBalanceAfter = governanceToken.balanceOf(alice);
+        assertEq(
+            aliceBalanceAfter,
+            aliceBalanceBefore + expectedWinnings,
+            "Incorrect winnings amount"
+        );
+
+        // Check that Alice's position is reset
+        IMarket.Position memory alicePositionAfter = market.getPosition(
+            proposalId,
+            alice
+        );
+        assertEq(alicePositionAfter.yesShares, 0, "YES shares not reset");
+        assertEq(alicePositionAfter.noShares, 0, "NO shares not reset");
+
+        // Ensure Alice can't claim again
+        vm.expectRevert("No winning shares to claim");
+        market.claimWinnings(proposalId);
+    }
+
+    function test_ClaimWinningsWithDifferentOutcomes() external {
+        // Buy more shares to create an imbalance
+        vm.prank(charlie);
+        market.buyShares(proposalId, true, BUY_AMOUNT * 2);
+
+        // Resolve market with NO outcome
+        vm.warp(block.timestamp + tradingPeriod + 1);
+        oracle.resolveMarket(address(market), proposalId, IMarket.Outcome.No);
+
+        uint256 bobBalanceBefore = governanceToken.balanceOf(bob);
+        uint256 expectedWinnings = market.calculateWinnings(proposalId, bob);
+
+        vm.prank(bob);
+        market.claimWinnings(proposalId);
+
+        uint256 bobBalanceAfter = governanceToken.balanceOf(bob);
+        assertEq(
+            bobBalanceAfter,
+            bobBalanceBefore + expectedWinnings,
+            "Incorrect winnings amount for Bob"
+        );
+
+        // Ensure Charlie can't claim (bought YES shares)
+        vm.prank(charlie);
+        vm.expectRevert("No winning shares to claim");
+        market.claimWinnings(proposalId);
     }
 }
 
