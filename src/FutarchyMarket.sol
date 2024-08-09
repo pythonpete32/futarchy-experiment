@@ -3,11 +3,13 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IMarket} from "./interfaces/IMarket.sol";
+import {Events} from "./utils/Events.sol";
+import {Types} from "./utils/Types.sol";
 
 /// @title Futarchy Market Contract
 /// @notice This contract implements a futarchy-based prediction market for DAO proposals
 /// @dev This contract uses virtual liquidity and a simplified CPMM model
-contract FutarchyMarket is IMarket {
+contract FutarchyMarket is IMarket, Types, Events {
     /// @notice The governance token used for trading in the market
     IERC20 public immutable governanceToken;
 
