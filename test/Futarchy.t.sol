@@ -23,11 +23,7 @@ abstract contract FutarchyMarketTestBase is Test {
         dao = new DAO();
         oracle = IOracle(new MockOracle());
 
-        market = new FutarchyMarket(
-            address(governanceToken),
-            address(dao),
-            address(oracle)
-        );
+        market = new FutarchyMarket(address(governanceToken), address(dao), address(oracle));
 
         governanceToken.mint(alice, 1000 * 10 ** 18);
         governanceToken.mint(bob, 1000 * 10 ** 18);
@@ -81,31 +77,15 @@ contract CreateMarketTest is FutarchyMarketTestBase {
         market.createMarket(proposalId, tradingPeriod);
 
         IMarket.MarketInfo memory marketInfo = market.getMarketInfo(proposalId);
-        assertEq(
-            marketInfo.proposalId,
-            proposalId,
-            "ProposalID not saved correctly"
-        );
+        assertEq(marketInfo.proposalId, proposalId, "ProposalID not saved correctly");
         assertEq(marketInfo.tradingPeriod, tradingPeriod);
         assertEq(marketInfo.creationTime, block.timestamp);
         assertEq(marketInfo.resolved, false);
-        assertEq(uint(marketInfo.outcome), uint(IMarket.Outcome.Unresolved));
-        assertEq(
-            marketInfo.yesShares,
-            FutarchyMarket(market).INITIAL_LIQUIDITY()
-        );
-        assertEq(
-            marketInfo.noShares,
-            FutarchyMarket(market).INITIAL_LIQUIDITY()
-        );
-        assertEq(
-            marketInfo.yesReserve,
-            FutarchyMarket(market).INITIAL_LIQUIDITY()
-        );
-        assertEq(
-            marketInfo.noReserve,
-            FutarchyMarket(market).INITIAL_LIQUIDITY()
-        );
+        assertEq(uint256(marketInfo.outcome), uint256(IMarket.Outcome.Unresolved));
+        assertEq(marketInfo.yesShares, FutarchyMarket(market).INITIAL_LIQUIDITY());
+        assertEq(marketInfo.noShares, FutarchyMarket(market).INITIAL_LIQUIDITY());
+        assertEq(marketInfo.yesReserve, FutarchyMarket(market).INITIAL_LIQUIDITY());
+        assertEq(marketInfo.noReserve, FutarchyMarket(market).INITIAL_LIQUIDITY());
     }
 }
 
@@ -150,10 +130,7 @@ contract BuySharesTest is FutarchyMarketTestBase {
         vm.prank(alice);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IERC20Errors.ERC20InsufficientBalance.selector,
-                alice,
-                1000 * 10 ** 18,
-                excessiveAmount
+                IERC20Errors.ERC20InsufficientBalance.selector, alice, 1000 * 10 ** 18, excessiveAmount
             )
         );
         market.buyShares(proposalId, true, excessiveAmount);
@@ -161,38 +138,20 @@ contract BuySharesTest is FutarchyMarketTestBase {
 
     function test_WhenAllConditionsAreMet() external {
         uint256 buyAmount = 10 * 10 ** 18;
-        (uint256 sharesToMint, ) = market.getSharesOutAmount(
-            proposalId,
-            true,
-            buyAmount
-        );
+        (uint256 sharesToMint,) = market.getSharesOutAmount(proposalId, true, buyAmount);
         uint256 aliceBalanceBefore = governanceToken.balanceOf(alice);
-        uint256 marketBalanceBefore = governanceToken.balanceOf(
-            address(market)
-        );
-        IMarket.MarketInfo memory marketInfoBefore = market.getMarketInfo(
-            proposalId
-        );
+        uint256 marketBalanceBefore = governanceToken.balanceOf(address(market));
+        IMarket.MarketInfo memory marketInfoBefore = market.getMarketInfo(proposalId);
         uint256 sharesBefore = marketInfoBefore.yesShares;
 
         vm.prank(alice);
         vm.expectEmit(true, true, true, true);
 
-        emit IMarket.SharesBought(
-            proposalId,
-            alice,
-            true,
-            sharesToMint,
-            buyAmount
-        );
+        emit IMarket.SharesBought(proposalId, alice, true, sharesToMint, buyAmount);
         market.buyShares(proposalId, true, buyAmount);
 
         // Check token transfer
-        assertEq(
-            governanceToken.balanceOf(alice),
-            aliceBalanceBefore - buyAmount,
-            "Incorrect token transfer from user"
-        );
+        assertEq(governanceToken.balanceOf(alice), aliceBalanceBefore - buyAmount, "Incorrect token transfer from user");
         assertEq(
             governanceToken.balanceOf(address(market)),
             marketBalanceBefore + buyAmount,
@@ -200,18 +159,11 @@ contract BuySharesTest is FutarchyMarketTestBase {
         );
 
         // Check share minting and market update
-        IMarket.Position memory alicePosition = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory alicePosition = market.getPosition(proposalId, alice);
         assertGt(alicePosition.yesShares, 0, "Shares not minted to user");
 
         IMarket.MarketInfo memory marketInfo = market.getMarketInfo(proposalId);
-        assertEq(
-            marketInfo.yesShares - sharesBefore,
-            alicePosition.yesShares,
-            "Market shares not updated correctly"
-        );
+        assertEq(marketInfo.yesShares - sharesBefore, alicePosition.yesShares, "Market shares not updated correctly");
         assertEq(
             marketInfo.yesReserve,
             FutarchyMarket(market).INITIAL_LIQUIDITY() + buyAmount,
@@ -263,10 +215,7 @@ contract SellSharesTest is FutarchyMarketTestBase {
     }
 
     function test_RevertWhen_UserDoesntHaveEnoughShares() external {
-        IMarket.Position memory alicePosition = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory alicePosition = market.getPosition(proposalId, alice);
         uint256 excessiveAmount = alicePosition.yesShares + 1;
 
         vm.prank(alice);
@@ -275,59 +224,31 @@ contract SellSharesTest is FutarchyMarketTestBase {
     }
 
     function test_WhenAllConditionsAreMet() external {
-        IMarket.Position memory alicePositionBefore = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory alicePositionBefore = market.getPosition(proposalId, alice);
         uint256 sellAmount = alicePositionBefore.yesShares / 2;
         uint256 aliceBalanceBefore = governanceToken.balanceOf(alice);
-        IMarket.MarketInfo memory marketInfoBefore = market.getMarketInfo(
-            proposalId
-        );
+        IMarket.MarketInfo memory marketInfoBefore = market.getMarketInfo(proposalId);
 
-        (uint256 expectedTokensToReceive, ) = market.getTokensOutAmount(
-            proposalId,
-            true,
-            sellAmount
-        );
+        (uint256 expectedTokensToReceive,) = market.getTokensOutAmount(proposalId, true, sellAmount);
 
         vm.prank(alice);
         vm.expectEmit(true, true, true, true);
-        emit IMarket.SharesSold(
-            proposalId,
-            alice,
-            true,
-            sellAmount,
-            expectedTokensToReceive
-        );
+        emit IMarket.SharesSold(proposalId, alice, true, sellAmount, expectedTokensToReceive);
         market.sellShares(proposalId, true, sellAmount);
 
         // Check token transfer
         uint256 aliceBalanceAfter = governanceToken.balanceOf(alice);
-        assertEq(
-            aliceBalanceAfter,
-            aliceBalanceBefore + expectedTokensToReceive,
-            "Incorrect token transfer to user"
-        );
+        assertEq(aliceBalanceAfter, aliceBalanceBefore + expectedTokensToReceive, "Incorrect token transfer to user");
 
         // Check share burning and market update
-        IMarket.Position memory alicePositionAfter = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory alicePositionAfter = market.getPosition(proposalId, alice);
         assertEq(
-            alicePositionAfter.yesShares,
-            alicePositionBefore.yesShares - sellAmount,
-            "Shares not burned from user"
+            alicePositionAfter.yesShares, alicePositionBefore.yesShares - sellAmount, "Shares not burned from user"
         );
 
-        IMarket.MarketInfo memory marketInfoAfter = market.getMarketInfo(
-            proposalId
-        );
+        IMarket.MarketInfo memory marketInfoAfter = market.getMarketInfo(proposalId);
         assertEq(
-            marketInfoAfter.yesShares,
-            marketInfoBefore.yesShares - sellAmount,
-            "Market shares not updated correctly"
+            marketInfoAfter.yesShares, marketInfoBefore.yesShares - sellAmount, "Market shares not updated correctly"
         );
         assertEq(
             marketInfoAfter.yesReserve,
@@ -337,33 +258,17 @@ contract SellSharesTest is FutarchyMarketTestBase {
     }
 
     function test_CorrectTokenCalculation() external {
-        IMarket.Position memory alicePosition = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory alicePosition = market.getPosition(proposalId, alice);
         uint256 sellAmount = alicePosition.yesShares / 2;
 
-        (uint256 tokensToReceive, uint256 effectivePrice) = market
-            .getTokensOutAmount(proposalId, true, sellAmount);
+        (uint256 tokensToReceive, uint256 effectivePrice) = market.getTokensOutAmount(proposalId, true, sellAmount);
 
         // Ensure tokensToReceive is not zero
-        assertGt(
-            tokensToReceive,
-            0,
-            "Tokens to receive should be greater than zero"
-        );
+        assertGt(tokensToReceive, 0, "Tokens to receive should be greater than zero");
 
         // Ensure effectivePrice is reasonable (not zero or extremely high)
-        assertGt(
-            effectivePrice,
-            0,
-            "Effective price should be greater than zero"
-        );
-        assertLt(
-            effectivePrice,
-            1e36,
-            "Effective price should be less than 1e36"
-        );
+        assertGt(effectivePrice, 0, "Effective price should be greater than zero");
+        assertLt(effectivePrice, 1e36, "Effective price should be less than 1e36");
 
         // Perform the actual sell
         vm.prank(alice);
@@ -433,20 +338,10 @@ contract ResolveMarketTest is FutarchyMarketTestBase {
 
         market.resolveMarket(proposalId, IMarket.Outcome.Yes);
 
-        IMarket.MarketInfo memory resolvedMarket = market.getMarketInfo(
-            proposalId
-        );
-        assertEq(
-            uint(resolvedMarket.outcome),
-            uint(IMarket.Outcome.Yes),
-            "Incorrect outcome"
-        );
+        IMarket.MarketInfo memory resolvedMarket = market.getMarketInfo(proposalId);
+        assertEq(uint256(resolvedMarket.outcome), uint256(IMarket.Outcome.Yes), "Incorrect outcome");
         assertTrue(resolvedMarket.resolved, "Market not marked as resolved");
-        assertEq(
-            resolvedMarket.resolutionTime,
-            block.timestamp,
-            "Incorrect resolution time"
-        );
+        assertEq(resolvedMarket.resolutionTime, block.timestamp, "Incorrect resolution time");
     }
 
     function test_ResolvingWithDifferentOutcomes() external {
@@ -455,14 +350,8 @@ contract ResolveMarketTest is FutarchyMarketTestBase {
 
         market.resolveMarket(proposalId, IMarket.Outcome.No);
 
-        IMarket.MarketInfo memory resolvedMarket = market.getMarketInfo(
-            proposalId
-        );
-        assertEq(
-            uint(resolvedMarket.outcome),
-            uint(IMarket.Outcome.No),
-            "Incorrect outcome"
-        );
+        IMarket.MarketInfo memory resolvedMarket = market.getMarketInfo(proposalId);
+        assertEq(uint256(resolvedMarket.outcome), uint256(IMarket.Outcome.No), "Incorrect outcome");
 
         // Create and resolve another market with Unresolved outcome
         bytes32 proposalId2 = keccak256("testProposal2");
@@ -473,14 +362,8 @@ contract ResolveMarketTest is FutarchyMarketTestBase {
         vm.prank(address(oracle));
         market.resolveMarket(proposalId2, IMarket.Outcome.Unresolved);
 
-        IMarket.MarketInfo memory resolvedMarket2 = market.getMarketInfo(
-            proposalId2
-        );
-        assertEq(
-            uint(resolvedMarket2.outcome),
-            uint(IMarket.Outcome.Unresolved),
-            "Incorrect outcome"
-        );
+        IMarket.MarketInfo memory resolvedMarket2 = market.getMarketInfo(proposalId2);
+        assertEq(uint256(resolvedMarket2.outcome), uint256(IMarket.Outcome.Unresolved), "Incorrect outcome");
     }
 
     function test_ResolvingImmediatelyAfterTradingPeriod() external {
@@ -493,9 +376,7 @@ contract ResolveMarketTest is FutarchyMarketTestBase {
         vm.prank(address(oracle));
         market.resolveMarket(proposalId, IMarket.Outcome.Yes);
 
-        IMarket.MarketInfo memory resolvedMarket = market.getMarketInfo(
-            proposalId
-        );
+        IMarket.MarketInfo memory resolvedMarket = market.getMarketInfo(proposalId);
         assertTrue(resolvedMarket.resolved, "Market not marked as resolved");
     }
 }
@@ -558,17 +439,10 @@ contract ClaimWinningsTest is FutarchyMarketTestBase {
         market.claimWinnings(proposalId);
 
         uint256 aliceBalanceAfter = governanceToken.balanceOf(alice);
-        assertEq(
-            aliceBalanceAfter,
-            aliceBalanceBefore + expectedWinnings,
-            "Incorrect winnings amount"
-        );
+        assertEq(aliceBalanceAfter, aliceBalanceBefore + expectedWinnings, "Incorrect winnings amount");
 
         // Check that Alice's position is reset
-        IMarket.Position memory alicePositionAfter = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory alicePositionAfter = market.getPosition(proposalId, alice);
         assertEq(alicePositionAfter.yesShares, 0, "YES shares not reset");
         assertEq(alicePositionAfter.noShares, 0, "NO shares not reset");
 
@@ -593,11 +467,7 @@ contract ClaimWinningsTest is FutarchyMarketTestBase {
         market.claimWinnings(proposalId);
 
         uint256 bobBalanceAfter = governanceToken.balanceOf(bob);
-        assertEq(
-            bobBalanceAfter,
-            bobBalanceBefore + expectedWinnings,
-            "Incorrect winnings amount for Bob"
-        );
+        assertEq(bobBalanceAfter, bobBalanceBefore + expectedWinnings, "Incorrect winnings amount for Bob");
 
         // Ensure Charlie can't claim (bought YES shares)
         vm.prank(charlie);
@@ -636,36 +506,19 @@ contract GetPositionTest is FutarchyMarketTestBase {
         market.buyShares(proposalId, false, BUY_AMOUNT);
 
         // Check Alice's position
-        IMarket.Position memory alicePosition = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory alicePosition = market.getPosition(proposalId, alice);
         assertGt(alicePosition.yesShares, 0, "Alice should have YES shares");
         assertEq(alicePosition.noShares, 0, "Alice should have no NO shares");
 
         // Check Bob's position
-        IMarket.Position memory bobPosition = market.getPosition(
-            proposalId,
-            bob
-        );
+        IMarket.Position memory bobPosition = market.getPosition(proposalId, bob);
         assertEq(bobPosition.yesShares, 0, "Bob should have no YES shares");
         assertGt(bobPosition.noShares, 0, "Bob should have NO shares");
 
         // Check Charlie's position (who hasn't bought any shares)
-        IMarket.Position memory charliePosition = market.getPosition(
-            proposalId,
-            charlie
-        );
-        assertEq(
-            charliePosition.yesShares,
-            0,
-            "Charlie should have no YES shares"
-        );
-        assertEq(
-            charliePosition.noShares,
-            0,
-            "Charlie should have no NO shares"
-        );
+        IMarket.Position memory charliePosition = market.getPosition(proposalId, charlie);
+        assertEq(charliePosition.yesShares, 0, "Charlie should have no YES shares");
+        assertEq(charliePosition.noShares, 0, "Charlie should have no NO shares");
     }
 
     function test_PositionAfterMultipleTrades() external {
@@ -681,17 +534,10 @@ contract GetPositionTest is FutarchyMarketTestBase {
         vm.prank(alice);
         market.buyShares(proposalId, false, BUY_AMOUNT / 4);
 
-        IMarket.Position memory alicePosition = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory alicePosition = market.getPosition(proposalId, alice);
         assertGt(alicePosition.yesShares, 0, "Alice should have YES shares");
         assertGt(alicePosition.noShares, 0, "Alice should have NO shares");
-        assertGt(
-            alicePosition.yesShares,
-            alicePosition.noShares,
-            "Alice should have more YES shares than NO shares"
-        );
+        assertGt(alicePosition.yesShares, alicePosition.noShares, "Alice should have more YES shares than NO shares");
     }
 
     function test_PositionAfterSellingShares() external {
@@ -699,30 +545,20 @@ contract GetPositionTest is FutarchyMarketTestBase {
         vm.prank(alice);
         market.buyShares(proposalId, true, BUY_AMOUNT);
 
-        IMarket.Position memory positionBeforeSelling = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory positionBeforeSelling = market.getPosition(proposalId, alice);
 
         // Alice sells half of her YES shares
         uint256 sharesToSell = positionBeforeSelling.yesShares / 2;
         vm.prank(alice);
         market.sellShares(proposalId, true, sharesToSell);
 
-        IMarket.Position memory positionAfterSelling = market.getPosition(
-            proposalId,
-            alice
-        );
+        IMarket.Position memory positionAfterSelling = market.getPosition(proposalId, alice);
         assertEq(
             positionAfterSelling.yesShares,
             positionBeforeSelling.yesShares - sharesToSell,
             "Alice's YES shares should decrease after selling"
         );
-        assertEq(
-            positionAfterSelling.noShares,
-            0,
-            "Alice's NO shares should remain zero"
-        );
+        assertEq(positionAfterSelling.noShares, 0, "Alice's NO shares should remain zero");
     }
 
     function test_PositionInMultipleMarkets() external {
@@ -739,35 +575,13 @@ contract GetPositionTest is FutarchyMarketTestBase {
         vm.prank(alice);
         market.buyShares(proposalId2, false, BUY_AMOUNT);
 
-        IMarket.Position memory alicePosition1 = market.getPosition(
-            proposalId,
-            alice
-        );
-        IMarket.Position memory alicePosition2 = market.getPosition(
-            proposalId2,
-            alice
-        );
+        IMarket.Position memory alicePosition1 = market.getPosition(proposalId, alice);
+        IMarket.Position memory alicePosition2 = market.getPosition(proposalId2, alice);
 
-        assertGt(
-            alicePosition1.yesShares,
-            0,
-            "Alice should have YES shares in first market"
-        );
-        assertEq(
-            alicePosition1.noShares,
-            0,
-            "Alice should have no NO shares in first market"
-        );
+        assertGt(alicePosition1.yesShares, 0, "Alice should have YES shares in first market");
+        assertEq(alicePosition1.noShares, 0, "Alice should have no NO shares in first market");
 
-        assertEq(
-            alicePosition2.yesShares,
-            0,
-            "Alice should have no YES shares in second market"
-        );
-        assertGt(
-            alicePosition2.noShares,
-            0,
-            "Alice should have NO shares in second market"
-        );
+        assertEq(alicePosition2.yesShares, 0, "Alice should have no YES shares in second market");
+        assertGt(alicePosition2.noShares, 0, "Alice should have NO shares in second market");
     }
 }

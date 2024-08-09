@@ -42,11 +42,7 @@ interface IMarket {
     /// @param shareAmount The number of shares bought
     /// @param tokenAmount The amount of governance tokens paid
     event SharesBought(
-        bytes32 indexed proposalId,
-        address indexed trader,
-        bool position,
-        uint256 shareAmount,
-        uint256 tokenAmount
+        bytes32 indexed proposalId, address indexed trader, bool position, uint256 shareAmount, uint256 tokenAmount
     );
 
     /// @notice Event emitted when shares are sold
@@ -56,11 +52,7 @@ interface IMarket {
     /// @param shareAmount The number of shares sold
     /// @param tokenAmount The amount of governance tokens received
     event SharesSold(
-        bytes32 indexed proposalId,
-        address indexed trader,
-        bool position,
-        uint256 shareAmount,
-        uint256 tokenAmount
+        bytes32 indexed proposalId, address indexed trader, bool position, uint256 shareAmount, uint256 tokenAmount
     );
 
     /// @notice Event emitted when a market is resolved
@@ -76,36 +68,19 @@ interface IMarket {
     /// @param proposalId The ID of the proposal associated with the market
     /// @param trader The address of the user claiming winnings
     /// @param amount The amount of winnings claimed
-    event WinningsClaimed(
-        bytes32 indexed proposalId,
-        address indexed trader,
-        uint256 amount
-    );
+    event WinningsClaimed(bytes32 indexed proposalId, address indexed trader, uint256 amount);
 
     function createMarket(bytes32 proposalId, uint256 tradingPeriod) external;
 
-    function buyShares(
-        bytes32 proposalId,
-        bool position,
-        uint256 amount
-    ) external;
+    function buyShares(bytes32 proposalId, bool position, uint256 amount) external;
 
-    function sellShares(
-        bytes32 proposalId,
-        bool position,
-        uint256 shareAmount
-    ) external;
+    function sellShares(bytes32 proposalId, bool position, uint256 shareAmount) external;
 
     function resolveMarket(bytes32 proposalId, Outcome outcome) external;
 
     function claimWinnings(bytes32 proposalId) external;
 
-    function getPosition(
-        bytes32 proposalId,
-        address trader
-    ) external view returns (Position memory);
+    function getPosition(bytes32 proposalId, address trader) external view returns (Position memory);
 
-    function getMarketInfo(
-        bytes32 proposalId
-    ) external view returns (MarketInfo memory);
+    function getMarketInfo(bytes32 proposalId) external view returns (MarketInfo memory);
 }

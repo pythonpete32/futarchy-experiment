@@ -34,11 +34,7 @@ contract FutarchyMarket is IMarket {
     /// @param _governanceToken The address of the governance token contract
     /// @param _daoAddress The address of the DAO contract
     /// @param _oracle The address authorized to resolve markets
-    constructor(
-        address _governanceToken,
-        address _daoAddress,
-        address _oracle
-    ) {
+    constructor(address _governanceToken, address _daoAddress, address _oracle) {
         governanceToken = IERC20(_governanceToken);
         daoAddress = _daoAddress;
         oracle = _oracle;
@@ -57,11 +53,7 @@ contract FutarchyMarket is IMarket {
 
         // 3. Transfer INITIAL_LIQUIDITY * 2 tokens from the DAO to this contract
         require(
-            governanceToken.transferFrom(
-                daoAddress,
-                address(this),
-                INITIAL_LIQUIDITY * 2
-            ),
+            governanceToken.transferFrom(daoAddress, address(this), INITIAL_LIQUIDITY * 2),
             "Failed to transfer initial liquidity"
         );
 
@@ -94,33 +86,19 @@ contract FutarchyMarket is IMarket {
     /// @param proposalId The ID of the proposal associated with the market
     /// @param position Type of share (true for YES shares, false for NO shares)
     /// @param amount The amount of governance tokens to spend
-    function buyShares(
-        bytes32 proposalId,
-        bool position,
-        uint256 amount
-    ) external {
+    function buyShares(bytes32 proposalId, bool position, uint256 amount) external {
         // 1. Retrieve market info for proposalId
         MarketInfo storage market = markets[proposalId];
 
         // 2. Ensure the market exists and is within the trading period
         require(!market.resolved, "Market is already resolved");
         require(market.creationTime != 0, "Market does not exist");
-        require(
-            block.timestamp <= market.creationTime + market.tradingPeriod,
-            "Trading period has ended"
-        );
+        require(block.timestamp <= market.creationTime + market.tradingPeriod, "Trading period has ended");
 
         // 6. Transfer inputAmount of governanceTokens from user to contract
-        require(
-            governanceToken.transferFrom(msg.sender, address(this), amount),
-            "Failed to transfer tokens"
-        );
+        require(governanceToken.transferFrom(msg.sender, address(this), amount), "Failed to transfer tokens");
 
-        (uint256 sharesToMint, ) = getSharesOutAmount(
-            proposalId,
-            position,
-            amount
-        );
+        (uint256 sharesToMint,) = getSharesOutAmount(proposalId, position, amount);
 
         require(sharesToMint > 0, "Insufficient shares to mint");
 
@@ -138,24 +116,14 @@ contract FutarchyMarket is IMarket {
         }
 
         // 8. Emit SharesBought event
-        emit SharesBought(
-            proposalId,
-            msg.sender,
-            position,
-            sharesToMint,
-            amount
-        );
+        emit SharesBought(proposalId, msg.sender, position, sharesToMint, amount);
     }
 
     /// @notice Allows a user to sell shares in a market
     /// @param proposalId The ID of the proposal associated with the market
     /// @param position Type of share (true for YES shares, false for NO shares)
     /// @param shareAmount The number of shares to sell
-    function sellShares(
-        bytes32 proposalId,
-        bool position,
-        uint256 shareAmount
-    ) external {
+    function sellShares(bytes32 proposalId, bool position, uint256 shareAmount) external {
         // 1. Retrieve market info for proposalId
         MarketInfo storage market = markets[proposalId];
 
@@ -163,31 +131,18 @@ contract FutarchyMarket is IMarket {
         // 3. Ensure user has enough shares to sell
         require(market.creationTime != 0, "Market does not exist");
         require(!market.resolved, "Market is already resolved");
-        require(
-            block.timestamp <= market.creationTime + market.tradingPeriod,
-            "Trading period has ended"
-        );
+        require(block.timestamp <= market.creationTime + market.tradingPeriod, "Trading period has ended");
 
         // 4. Determine input_reserve and output_reserve based on position:
         Position storage userPosition = positions[proposalId][msg.sender];
         if (position) {
-            require(
-                userPosition.yesShares >= shareAmount,
-                "Insufficient YES shares"
-            );
+            require(userPosition.yesShares >= shareAmount, "Insufficient YES shares");
         } else {
-            require(
-                userPosition.noShares >= shareAmount,
-                "Insufficient NO shares"
-            );
+            require(userPosition.noShares >= shareAmount, "Insufficient NO shares");
         }
 
         // 5. Calculate tokens to return:
-        (uint256 tokensToReceive, ) = getTokensOutAmount(
-            proposalId,
-            position,
-            shareAmount
-        );
+        (uint256 tokensToReceive,) = getTokensOutAmount(proposalId, position, shareAmount);
 
         // 6. Update market state:
         if (position) {
@@ -200,19 +155,10 @@ contract FutarchyMarket is IMarket {
             userPosition.noShares -= shareAmount;
         }
         // 8. Transfer tokens of governanceTokens to user
-        require(
-            governanceToken.transfer(msg.sender, tokensToReceive),
-            "Failed to transfer tokens"
-        );
+        require(governanceToken.transfer(msg.sender, tokensToReceive), "Failed to transfer tokens");
 
         // 9. Emit SharesSold event
-        emit SharesSold(
-            proposalId,
-            msg.sender,
-            position,
-            shareAmount,
-            tokensToReceive
-        );
+        emit SharesSold(proposalId, msg.sender, position, shareAmount, tokensToReceive);
     }
 
     /// @notice Calculates the amount of shares that would be received for a given input amount
@@ -221,11 +167,11 @@ contract FutarchyMarket is IMarket {
     /// @param amount The amount of governance tokens to spend
     /// @return sharesReceived The amount of shares that would be received
     /// @return effectivePrice The effective price per share, accounting for slippage
-    function getSharesOutAmount(
-        bytes32 proposalId,
-        bool position,
-        uint256 amount
-    ) public view returns (uint256 sharesReceived, uint256 effectivePrice) {
+    function getSharesOutAmount(bytes32 proposalId, bool position, uint256 amount)
+        public
+        view
+        returns (uint256 sharesReceived, uint256 effectivePrice)
+    {
         MarketInfo storage market = markets[proposalId];
         require(market.creationTime != 0, "Market does not exist");
 
@@ -246,11 +192,11 @@ contract FutarchyMarket is IMarket {
     /// @param shareAmount The number of shares to sell
     /// @return tokensToReceive The amount of tokens that would be received
     /// @return effectivePrice The effective price per share, accounting for slippage
-    function getTokensOutAmount(
-        bytes32 proposalId,
-        bool position,
-        uint256 shareAmount
-    ) public view returns (uint256 tokensToReceive, uint256 effectivePrice) {
+    function getTokensOutAmount(bytes32 proposalId, bool position, uint256 shareAmount)
+        public
+        view
+        returns (uint256 tokensToReceive, uint256 effectivePrice)
+    {
         MarketInfo storage market = markets[proposalId];
         require(market.creationTime != 0, "Market does not exist");
         uint256 inputShares = position ? market.yesShares : market.noShares;
@@ -276,10 +222,7 @@ contract FutarchyMarket is IMarket {
         // 3. Ensure market exists and is not already resolved
         require(market.creationTime != 0, "Market does not exist");
         require(!market.resolved, "Market is already resolved");
-        require(
-            block.timestamp > market.creationTime + market.tradingPeriod,
-            "Trading period has not ended"
-        );
+        require(block.timestamp > market.creationTime + market.tradingPeriod, "Trading period has not ended");
         // 4. Update market:
         market.resolved = true;
         market.resolutionTime = block.timestamp;
@@ -325,10 +268,7 @@ contract FutarchyMarket is IMarket {
         userPosition.noShares = 0;
 
         // 6. Transfer winnings to user
-        require(
-            governanceToken.transfer(msg.sender, winnings),
-            "Transfer failed"
-        );
+        require(governanceToken.transfer(msg.sender, winnings), "Transfer failed");
 
         // Transfer winnings to user
         emit WinningsClaimed(proposalId, msg.sender, winnings);
@@ -338,10 +278,7 @@ contract FutarchyMarket is IMarket {
     /// @param proposalId The ID of the proposal associated with the market
     /// @param user The address of the user
     /// @return winnings The amount of winnings the user can claim
-    function calculateWinnings(
-        bytes32 proposalId,
-        address user
-    ) public view returns (uint256 winnings) {
+    function calculateWinnings(bytes32 proposalId, address user) public view returns (uint256 winnings) {
         MarketInfo storage market = markets[proposalId];
         require(market.resolved, "Market is not resolved");
 
@@ -372,10 +309,7 @@ contract FutarchyMarket is IMarket {
     /// @param proposalId The ID of the proposal associated with the market
     /// @param user The address of the user
     /// @return The user's position (number of YES and NO shares)
-    function getPosition(
-        bytes32 proposalId,
-        address user
-    ) external view returns (Position memory) {
+    function getPosition(bytes32 proposalId, address user) external view returns (Position memory) {
         require(markets[proposalId].creationTime != 0, "Market does not exist");
         return positions[proposalId][user];
     }
@@ -390,9 +324,7 @@ contract FutarchyMarket is IMarket {
         emit OracleUpdated(newOracle);
     }
 
-    function getMarketInfo(
-        bytes32 proposalId
-    ) external view override returns (MarketInfo memory) {
+    function getMarketInfo(bytes32 proposalId) external view override returns (MarketInfo memory) {
         require(markets[proposalId].creationTime != 0, "Market does not exist");
         return markets[proposalId];
     }

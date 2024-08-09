@@ -6,13 +6,8 @@ import {IDAO} from "../interfaces/IDAO.sol";
 contract DAO is IDAO {
     mapping(bytes32 => Proposal) public proposals;
 
-    function createProposal(
-        string memory description,
-        uint256 votingPeriod
-    ) external override returns (bytes32) {
-        bytes32 proposalId = keccak256(
-            abi.encodePacked(description, block.timestamp, msg.sender)
-        );
+    function createProposal(string memory description, uint256 votingPeriod) external override returns (bytes32) {
+        bytes32 proposalId = keccak256(abi.encodePacked(description, block.timestamp, msg.sender));
         proposals[proposalId] = Proposal({
             id: proposalId,
             proposer: msg.sender,
@@ -26,10 +21,7 @@ contract DAO is IDAO {
     }
 
     function vote(bytes32 proposalId, bool support) external override {
-        require(
-            block.timestamp < proposals[proposalId].votingEndTime,
-            "Voting period has ended"
-        );
+        require(block.timestamp < proposals[proposalId].votingEndTime, "Voting period has ended");
         if (support) {
             proposals[proposalId].yesVotes += 1;
         } else {
@@ -38,18 +30,13 @@ contract DAO is IDAO {
     }
 
     function executeProposal(bytes32 proposalId) external override {
-        require(
-            block.timestamp >= proposals[proposalId].votingEndTime,
-            "Voting period has not ended"
-        );
+        require(block.timestamp >= proposals[proposalId].votingEndTime, "Voting period has not ended");
         require(!proposals[proposalId].executed, "Proposal already executed");
         proposals[proposalId].executed = true;
         // Implementation of proposal execution would go here
     }
 
-    function getProposal(
-        bytes32 proposalId
-    ) external view override returns (Proposal memory) {
+    function getProposal(bytes32 proposalId) external view override returns (Proposal memory) {
         return proposals[proposalId];
     }
 }
