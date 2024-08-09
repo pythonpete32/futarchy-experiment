@@ -2,6 +2,7 @@
 cache/
 out/
 .DS_STORE
+coverage_report/
 
 # Ignores development broadcast logs
 !/broadcast
