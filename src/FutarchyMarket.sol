@@ -42,9 +42,10 @@ contract FutarchyMarket is IMarket {
 
     /// @notice Creates a new market for a proposal
     /// @param proposalId The ID of the proposal for which to create a market
+    /// @param questionHash The hash of the question associated with the proposal
     /// @param tradingPeriod The duration of the trading period
     /// @dev Only the DAO contract can call this function
-    function createMarket(bytes32 proposalId, uint256 tradingPeriod) external {
+    function createMarket(bytes32 proposalId, bytes32 questionHash, uint256 tradingPeriod) external {
         // 1. Verify that the caller is the DAO contract (msg.sender == daoAddress)
         require(msg.sender == daoAddress, "Caller is not the DAO");
 
@@ -60,6 +61,7 @@ contract FutarchyMarket is IMarket {
         // 4. Create a new MarketInfo struct:
         MarketInfo memory newMarket = MarketInfo({
             proposalId: proposalId,
+            questionHash: questionHash,
             creationTime: block.timestamp,
             tradingPeriod: tradingPeriod,
             resolved: false,

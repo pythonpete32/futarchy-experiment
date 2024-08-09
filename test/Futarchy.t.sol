@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {IDAO, DAO} from "../src/mocks/MockDAO.sol";
+import {DAO} from "../src/mocks/MockDAO.sol";
 import {IMarket, FutarchyMarket} from "../src/FutarchyMarket.sol";
 import {MockOracle, IOracle} from "../src/mocks/MockOracle.sol";
 import {MockGovernanceToken} from "../src/mocks/MockGovernanceToken.sol";
@@ -48,34 +48,37 @@ contract CreateMarketTest is FutarchyMarketTestBase {
 
     function test_RevertWhen_CallerIsNotDAO() external {
         bytes32 proposalId = keccak256("proposal1");
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
+
         uint256 tradingPeriod = 7 days;
 
         vm.prank(alice);
         vm.expectRevert("Caller is not the DAO");
-        market.createMarket(proposalId, tradingPeriod);
+        market.createMarket(proposalId, questionHash, tradingPeriod);
     }
 
     function test_RevertWhen_MarketAlreadyExists() external {
         bytes32 proposalId = keccak256("proposal1");
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
+
         uint256 tradingPeriod = 7 days;
 
         vm.prank(address(dao));
-        market.createMarket(proposalId, tradingPeriod);
-
+        market.createMarket(proposalId, questionHash, tradingPeriod);
         vm.prank(address(dao));
         vm.expectRevert("Market already exists");
-        market.createMarket(proposalId, tradingPeriod);
+        market.createMarket(proposalId, questionHash, tradingPeriod);
     }
 
     function test_WhenCallerIsDAOAndMarketDoesntExist() external {
         bytes32 proposalId = keccak256(abi.encode(block.timestamp));
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
         uint256 tradingPeriod = 7 days;
 
         vm.prank(address(dao));
         vm.expectEmit(true, true, true, true);
         emit IMarket.MarketCreated(proposalId, tradingPeriod);
-        market.createMarket(proposalId, tradingPeriod);
-
+        market.createMarket(proposalId, questionHash, tradingPeriod);
         IMarket.MarketInfo memory marketInfo = market.getMarketInfo(proposalId);
         assertEq(marketInfo.proposalId, proposalId, "ProposalID not saved correctly");
         assertEq(marketInfo.tradingPeriod, tradingPeriod);
@@ -96,10 +99,11 @@ contract BuySharesTest is FutarchyMarketTestBase {
     function setUp() public override {
         super.setUp();
         proposalId = keccak256("testProposal");
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
         tradingPeriod = 7 days;
 
         vm.prank(address(dao));
-        market.createMarket(proposalId, tradingPeriod);
+        market.createMarket(proposalId, questionHash, tradingPeriod);
     }
 
     function test_RevertWhen_MarketDoesntExist() external {
@@ -181,11 +185,11 @@ contract SellSharesTest is FutarchyMarketTestBase {
     function setUp() public override {
         super.setUp();
         proposalId = keccak256("testProposal");
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
         tradingPeriod = 7 days;
 
         vm.prank(address(dao));
-        market.createMarket(proposalId, tradingPeriod);
-
+        market.createMarket(proposalId, questionHash, tradingPeriod);
         // Buy some shares for testing
         vm.prank(alice);
         market.buyShares(proposalId, true, BUY_AMOUNT);
@@ -291,10 +295,11 @@ contract ResolveMarketTest is FutarchyMarketTestBase {
     function setUp() public override {
         super.setUp();
         proposalId = keccak256("testProposal");
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
         tradingPeriod = 7 days;
 
         vm.prank(address(dao));
-        market.createMarket(proposalId, tradingPeriod);
+        market.createMarket(proposalId, questionHash, tradingPeriod);
     }
 
     function test_RevertWhen_CallerIsNotOracle() external {
@@ -355,8 +360,10 @@ contract ResolveMarketTest is FutarchyMarketTestBase {
 
         // Create and resolve another market with Unresolved outcome
         bytes32 proposalId2 = keccak256("testProposal2");
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
+
         vm.prank(address(dao));
-        market.createMarket(proposalId2, tradingPeriod);
+        market.createMarket(proposalId2, questionHash, tradingPeriod);
 
         vm.warp(block.timestamp + tradingPeriod + 1);
         vm.prank(address(oracle));
@@ -389,11 +396,11 @@ contract ClaimWinningsTest is FutarchyMarketTestBase {
     function setUp() public override {
         super.setUp();
         proposalId = keccak256("testProposal");
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
         tradingPeriod = 7 days;
 
         vm.prank(address(dao));
-        market.createMarket(proposalId, tradingPeriod);
-
+        market.createMarket(proposalId, questionHash, tradingPeriod);
         // Buy some shares for testing
         vm.prank(alice);
         market.buyShares(proposalId, true, BUY_AMOUNT);
@@ -484,10 +491,11 @@ contract GetPositionTest is FutarchyMarketTestBase {
     function setUp() public override {
         super.setUp();
         proposalId = keccak256("testProposal");
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
         tradingPeriod = 7 days;
 
         vm.prank(address(dao));
-        market.createMarket(proposalId, tradingPeriod);
+        market.createMarket(proposalId, questionHash, tradingPeriod);
     }
 
     function test_RevertWhen_MarketDoesntExist() external {
@@ -564,8 +572,9 @@ contract GetPositionTest is FutarchyMarketTestBase {
     function test_PositionInMultipleMarkets() external {
         // Create a second market
         bytes32 proposalId2 = keccak256("testProposal2");
+        bytes32 questionHash = keccak256("some ipfs hash to a question");
         vm.prank(address(dao));
-        market.createMarket(proposalId2, tradingPeriod);
+        market.createMarket(proposalId2, questionHash, tradingPeriod);
 
         // Alice buys YES shares in first market
         vm.prank(alice);

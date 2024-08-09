@@ -13,6 +13,7 @@ interface IMarket {
     /// @dev Each market is associated with a specific proposal in the DAO
     struct MarketInfo {
         bytes32 proposalId; // Unique identifier of the associated proposal
+        bytes32 questionHash; // Hash of the question associated with the proposal
         uint256 creationTime; // Timestamp when the market was created
         uint256 resolutionTime; // Timestamp when the market was resolved
         uint256 tradingPeriod; // Duration for which trading is allowed
@@ -70,7 +71,7 @@ interface IMarket {
     /// @param amount The amount of winnings claimed
     event WinningsClaimed(bytes32 indexed proposalId, address indexed trader, uint256 amount);
 
-    function createMarket(bytes32 proposalId, uint256 tradingPeriod) external;
+    function createMarket(bytes32 proposalId, bytes32 questionHash, uint256 tradingPeriod) external;
 
     function buyShares(bytes32 proposalId, bool position, uint256 amount) external;
 
